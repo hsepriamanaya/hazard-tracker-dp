@@ -319,12 +319,16 @@
   // =========================================================================
   const API_URL = "https://script.google.com/macros/s/AKfycbyiUoZpxq5Z6b8ZAjxcywsMG8hcI40y60AjK2Qar-PsIJqKjcMQ16eUaPF7b1bDvYxW7w/exec";
 
-  // Fungsi Helper Fetch API untuk Komunikasi ke Backend
+  // Fungsi Helper Fetch API untuk Komunikasi ke Backend (Versi Anti-CORS Apps Script)
   async function callApi(action, payloadData = {}) {
     const payload = { action: action, ...payloadData };
     const response = await fetch(API_URL, {
       method: 'POST',
-      body: JSON.stringify(payload)
+      headers: {
+        'Content-Type': 'text/plain;charset=utf-8', // WAJIB text/plain agar lolos keamanan Google
+      },
+      body: JSON.stringify(payload),
+      redirect: 'follow' // WAJIB follow karena Google Apps Script akan me-redirect request
     });
     const res = await response.json();
     if (!res.success) {
@@ -332,7 +336,6 @@
     }
     return res;
   }
-
   let allData = []; let currentFilteredData = []; let selectedItem = null; let currentImageBase64 = null;
   let navigationHistory = ['list']; let isHseMode = false; let globalPicList = [];
   let pollInterval; let itemsPerPage = 20; let currentlyRendered = 0;
