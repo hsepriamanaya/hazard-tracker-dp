@@ -546,7 +546,7 @@
       let bandingBadge = (d.bandingStatus === 'Pending') ? `<div class="banding-badge"><i class="fa-solid fa-triangle-exclamation"></i> BANDING</div>` : '';
       
       let risikoText = d.kriteriaRisiko ? escapeHTML(d.kriteriaRisiko) : 'Belum Dinilai';
-      let risikoBadge = `<span style="font-size: 0.65rem; background: #e2e8f0; color: #334155; padding: 3px 8px; border-radius: 12px; font-weight: 600; display: inline-block; margin-top: 5px;"><i class="fa-solid fa-gauge-high"></i> Risiko: ${risikoText}</span>`;
+      let risikoBadge = `<span style="font-size: 0.65rem; background: #e2e8f0; color: #334155; padding: 3px 8px; border-radius: 12px; font-weight: 600; display: inline-block; margin-top: 5px;"><i class="fa-solid fa-gauge-high"></i> Tingkat Risiko: ${risikoText}</span>`;
 
       return `<div class="card" onclick="openDetail('${d.id}')">
                 <div class="img-container">
@@ -614,7 +614,7 @@
     
     <div class="info-card" style="margin-top:20px;">
       <div class="info-item">
-        <div class="info-label">Kriteria Risiko Tingkat Bahaya</div>
+        <div class="info-label">Tingkat Kriteria Risiko Bahaya</div>
         <div class="info-value" style="font-weight:bold; color:var(--primary); font-size:1.1rem;"><i class="fa-solid fa-gauge-high"></i> ${risikoText}</div>
       </div>
       <hr style="border:0; border-top:1px solid #eee; margin:15px 0;">
