@@ -2,6 +2,7 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
   
@@ -190,6 +191,19 @@
     <div class="filter-grid">
       <select id="f-status" onchange="applyFilters()"><option value="All">Semua Status</option><option value="Open" selected>Open</option><option value="Progress">Progress</option><option value="Closed">Closed</option></select>
       
+      <!-- TAMBAHAN: Filter Banding & Risiko -->
+      <select id="f-banding" onchange="applyFilters()">
+        <option value="All">Semua Status Banding</option>
+        <option value="Pending">Pending (Menunggu)</option>
+        <option value="Disetujui">Banding Disetujui</option>
+        <option value="Ditolak">Banding Ditolak</option>
+        <option value="Tidak Ada">Tidak Ada Banding</option>
+      </select>
+      <select id="f-risiko" onchange="applyFilters()">
+        <option value="All">Semua Kriteria Risiko</option>
+      </select>
+      <!-- END TAMBAHAN -->
+
       <div class="multiselect-container" id="f-pic-container">
         <div class="select-box" onclick="toggleDropdown('f-pic-dropdown')">
           <span id="f-pic-text" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500;">Semua PIC/Dept</span>
@@ -319,23 +333,19 @@
   // =========================================================================
   const API_URL = "https://script.google.com/macros/s/AKfycbyiUoZpxq5Z6b8ZAjxcywsMG8hcI40y60AjK2Qar-PsIJqKjcMQ16eUaPF7b1bDvYxW7w/exec";
 
-  // Fungsi Helper Fetch API untuk Komunikasi ke Backend (Versi Anti-CORS Apps Script)
   async function callApi(action, payloadData = {}) {
     const payload = { action: action, ...payloadData };
     const response = await fetch(API_URL, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'text/plain;charset=utf-8', // WAJIB text/plain agar lolos keamanan Google
-      },
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify(payload),
-      redirect: 'follow' // WAJIB follow karena Google Apps Script akan me-redirect request
+      redirect: 'follow'
     });
     const res = await response.json();
-    if (!res.success) {
-      throw new Error(res.message || "Terjadi kesalahan pada server");
-    }
+    if (!res.success) { throw new Error(res.message || "Terjadi kesalahan pada server"); }
     return res;
   }
+  
   let allData = []; let currentFilteredData = []; let selectedItem = null; let currentImageBase64 = null;
   let navigationHistory = ['list']; let isHseMode = false; let globalPicList = [];
   let pollInterval; let itemsPerPage = 20; let currentlyRendered = 0;
@@ -348,28 +358,11 @@
   const errImg = "data:image/svg+xml;charset=UTF-8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22400%22 height=%22300%22 viewBox=%220 0 400 300%22%3E%3Crect fill=%22%23222%22 width=%22400%22 height=%22300%22/%3E%3Ctext fill=%22%23fff%22 x=%2250%25%22 y=%2250%25%22 text-anchor=%22middle%22 font-family=%22sans-serif%22 font-size=%2216%22 dy=%22.3em%22%3EFOTO TIDAK TERSEDIA%3C/text%3E%3C/svg%3E";
 
   const pieOptions = { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 10 } } }, datalabels: { color: '#fff', font: { weight: 'bold', size: 11 } } } };
-  const barOptions = { 
-    indexAxis: 'y', 
-    responsive: true, 
-    maintainAspectRatio: false, 
-    layout: { padding: { right: 30, left: 15 } }, 
-    plugins: { 
-      legend: { display: false }, 
-      datalabels: { 
-        anchor: 'end', align: 'end', color: '#003366', font: { weight: 'bold', size: 10 }, 
-        formatter: (v) => v > 0 ? v : '' 
-      } 
-    }, 
-    scales: { 
-      x: { display: false }, 
-      y: { ticks: { font: { size: 10 } } } 
-    } 
-  };
+  const barOptions = { indexAxis: 'y', responsive: true, maintainAspectRatio: false, layout: { padding: { right: 30, left: 15 } }, plugins: { legend: { display: false }, datalabels: { anchor: 'end', align: 'end', color: '#003366', font: { weight: 'bold', size: 10 }, formatter: (v) => v > 0 ? v : '' } }, scales: { x: { display: false }, y: { ticks: { font: { size: 10 } } } } };
 
   function buildChart(chartObj, key, canvasId, type, labels, data, colors) {
     const canvasEl = document.getElementById(canvasId);
     if (!canvasEl) return; 
-
     if (chartObj[key]) chartObj[key].destroy();
     chartObj[key] = new Chart(canvasEl, {
       type: type,
@@ -378,12 +371,7 @@
     });
   }
 
-  function toggleDropdown(id) {
-    const el = document.getElementById(id);
-    const isVisible = el.style.display === 'block';
-    document.querySelectorAll('.checkbox-dropdown').forEach(d => d.style.display = 'none');
-    el.style.display = isVisible ? 'none' : 'block';
-  }
+  function toggleDropdown(id) { const el = document.getElementById(id); const isVisible = el.style.display === 'block'; document.querySelectorAll('.checkbox-dropdown').forEach(d => d.style.display = 'none'); el.style.display = isVisible ? 'none' : 'block'; }
   document.addEventListener('click', function(e) { if (!e.target.closest('.multiselect-container')) document.querySelectorAll('.checkbox-dropdown').forEach(d => d.style.display = 'none'); });
   function toggleAllCb(dId, sId, tId, cb) { const isChecked = document.getElementById(sId).checked; const cbs = document.querySelectorAll(`#${dId} input[type="checkbox"]:not([id="${sId}"])`); cbs.forEach(c => c.checked = isChecked); updateCbText(dId, cbs.length, tId); cb(); }
   function updateCbState(dId, sId, tId, cb) { const cbs = document.querySelectorAll(`#${dId} input[type="checkbox"]:not([id="${sId}"])`); const checkedCount = Array.from(cbs).filter(c => c.checked).length; document.getElementById(sId).checked = (checkedCount === cbs.length); updateCbText(dId, cbs.length, tId); cb(); }
@@ -401,28 +389,18 @@
     const cachedData = localStorage.getItem('hazardDataCache');
     if (cachedData) { allData = JSON.parse(cachedData); initFilterOptions(); applyFilters(); applyDashboardFilters(); toggleLoading(false); document.getElementById('sync-indicator').style.display = 'block'; } else { toggleLoading(true); }
     
-    // Perubahan ke Fetch API
     callApi('getHazardData').then(res => { 
       localStorage.setItem('hazardDataCache', JSON.stringify(res.data)); 
       allData = res.data; 
       initFilterOptions(); applyFilters(); applyDashboardFilters(); toggleLoading(false); document.getElementById('sync-indicator').style.display = 'none'; startSilentPolling(); 
-      
-      callApi('getStatistikSemuaSAP').then(res2 => { 
-        allSapData = res2.data; 
-        applyDashboardFilters(); 
-      }); 
-    }).catch(err => {
-      toggleLoading(false);
-      showToast("Gagal memuat data", "error");
-    });
+      callApi('getStatistikSemuaSAP').then(res2 => { allSapData = res2.data; applyDashboardFilters(); }); 
+    }).catch(err => { toggleLoading(false); showToast("Gagal memuat data", "error"); });
   }
 
   function startSilentPolling() { pollInterval = setInterval(fetchDataIfActive, 180000); document.addEventListener("visibilitychange", function() { if (document.hidden) { clearInterval(pollInterval); } else { fetchDataIfActive(); pollInterval = setInterval(fetchDataIfActive, 180000); } }); }
   function fetchDataIfActive() { 
     if (!document.hidden) { 
-      document.getElementById('sync-indicator').innerHTML = '<i class="fa-solid fa-cloud-arrow-down fa-bounce"></i> Syncing...'; 
-      document.getElementById('sync-indicator').style.display = 'block'; 
-      
+      document.getElementById('sync-indicator').innerHTML = '<i class="fa-solid fa-cloud-arrow-down fa-bounce"></i> Syncing...'; document.getElementById('sync-indicator').style.display = 'block'; 
       callApi('getHazardData').then(res => { 
         const newStr = JSON.stringify(res.data); const oldStr = localStorage.getItem('hazardDataCache'); 
         if (newStr !== oldStr) { 
@@ -444,8 +422,14 @@
   }
 
   function initFilterOptions(isSilent = false) {
-    const picSet = new Set(); const yearSet = new Set();
-    allData.forEach(d => { if (d.pic && d.pic !== "Belum Ada PIC") picSet.add(d.pic); if (d.isoDate) { let yr = new Date(d.isoDate).getFullYear(); if (yr > 1900) yearSet.add(yr); }});
+    const picSet = new Set(); const yearSet = new Set(); const risikoSet = new Set();
+    
+    allData.forEach(d => { 
+      if (d.pic && d.pic !== "Belum Ada PIC") picSet.add(d.pic); 
+      if (d.isoDate) { let yr = new Date(d.isoDate).getFullYear(); if (yr > 1900) yearSet.add(yr); }
+      if (d.kriteriaRisiko) risikoSet.add(d.kriteriaRisiko);
+    });
+    
     globalPicList = Array.from(picSet).sort((a, b) => { let aIsPT = a.toUpperCase().startsWith("PT."); let bIsPT = b.toUpperCase().startsWith("PT."); if (aIsPT && !bIsPT) return -1; if (!aIsPT && bIsPT) return 1; return a.localeCompare(b); });
     
     let oldListSelections = []; let oldDbSelections = [];
@@ -454,14 +438,33 @@
     let picHtml = `<label><input type="checkbox" id="f-pic-all" onchange="toggleAllCb('f-pic-dropdown', 'f-pic-all', 'f-pic-text', applyFilters)" checked> <b>Pilih Semua</b></label>`;
     let dbPicHtml = `<label><input type="checkbox" id="db-f-pic-all" onchange="toggleAllCb('db-f-pic-dropdown', 'db-f-pic-all', 'db-f-pic-text', applyDashboardFilters)" checked> <b>Pilih Semua</b></label>`;
     
-    globalPicList.forEach(pic => { let cleanPic = escapeHTML(pic); let checkedList = (isSilent && oldListSelections.length > 0 && !oldListSelections.includes(pic)) ? "" : "checked"; let checkedDb = (isSilent && oldDbSelections.length > 0 && !oldDbSelections.includes(pic)) ? "" : "checked"; picHtml += `<label><input type="checkbox" value="${cleanPic}" onchange="updateCbState('f-pic-dropdown', 'f-pic-all', 'f-pic-text', applyFilters)" ${checkedList}> ${cleanPic}</label>`; dbPicHtml += `<label><input type="checkbox" value="${cleanPic}" onchange="updateCbState('db-f-pic-dropdown', 'db-f-pic-all', 'db-f-pic-text', applyDashboardFilters)" ${checkedDb}> ${cleanPic}</label>`; });
+    globalPicList.forEach(pic => { 
+      let cleanPic = escapeHTML(pic); 
+      let checkedList = (isSilent && oldListSelections.length > 0 && !oldListSelections.includes(pic)) ? "" : "checked"; 
+      let checkedDb = (isSilent && oldDbSelections.length > 0 && !oldDbSelections.includes(pic)) ? "" : "checked"; 
+      picHtml += `<label><input type="checkbox" value="${cleanPic}" onchange="updateCbState('f-pic-dropdown', 'f-pic-all', 'f-pic-text', applyFilters)" ${checkedList}> ${cleanPic}</label>`; 
+      dbPicHtml += `<label><input type="checkbox" value="${cleanPic}" onchange="updateCbState('db-f-pic-dropdown', 'db-f-pic-all', 'db-f-pic-text', applyDashboardFilters)" ${checkedDb}> ${cleanPic}</label>`; 
+    });
+    
     document.getElementById('f-pic-dropdown').innerHTML = picHtml; document.getElementById('db-f-pic-dropdown').innerHTML = dbPicHtml;
     updateCbState('f-pic-dropdown', 'f-pic-all', 'f-pic-text', ()=>{}); updateCbState('db-f-pic-dropdown', 'db-f-pic-all', 'db-f-pic-text', ()=>{});
     
     if(isSilent) return; 
-    const yearSelect = document.getElementById('f-year'); const dbYearSelect = document.getElementById('db-f-year');
-    yearSelect.innerHTML = '<option value="All">Semua Tahun</option>'; dbYearSelect.innerHTML = '<option value="All">Semua Tahun</option>';
-    Array.from(yearSet).sort((a,b)=>b-a).forEach(yr => { yearSelect.innerHTML += `<option value="${yr}">${yr}</option>`; dbYearSelect.innerHTML += `<option value="${yr}">${yr}</option>`; });
+    
+    // OPTIMASI DOM: Hindari += berlebihan di dalam loop DOM
+    let yearHtml = '<option value="All">Semua Tahun</option>';
+    Array.from(yearSet).sort((a,b)=>b-a).forEach(yr => { yearHtml += `<option value="${yr}">${yr}</option>`; });
+    document.getElementById('f-year').innerHTML = yearHtml;
+    document.getElementById('db-f-year').innerHTML = yearHtml;
+
+    // Tambahkan Kriteria Risiko ke Select Box
+    const fRisiko = document.getElementById('f-risiko');
+    if (fRisiko) {
+      let risikoHtml = '<option value="All">Semua Kriteria Risiko</option>';
+      Array.from(risikoSet).sort().forEach(r => { risikoHtml += `<option value="${r}">${r}</option>`; });
+      risikoHtml += '<option value="Belum Dinilai">Belum Dinilai</option>';
+      fRisiko.innerHTML = risikoHtml;
+    }
   }
 
   function applyFilters() {
@@ -471,6 +474,10 @@
     const sMonth = document.getElementById('f-month').value; 
     const sYear = document.getElementById('f-year').value;
     
+    // Tarik Value Filter Banding & Risiko
+    const sBanding = document.getElementById('f-banding') ? document.getElementById('f-banding').value : 'All';
+    const sRisiko = document.getElementById('f-risiko') ? document.getElementById('f-risiko').value : 'All';
+
     const parsedMonth = sMonth !== 'All' ? parseInt(sMonth) : 'All';
     const parsedYear = sYear !== 'All' ? parseInt(sYear) : 'All';
 
@@ -480,6 +487,18 @@
       let mMonth = true; 
       let mYear = true; 
       
+      // Filter Banding
+      let rawBanding = d.bandingStatus || '';
+      let mBanding = true;
+      if (sBanding !== 'All') {
+        if (sBanding === 'Tidak Ada') { mBanding = (!rawBanding || rawBanding === '-' || rawBanding === ''); } 
+        else { mBanding = (rawBanding === sBanding); }
+      }
+
+      // Filter Risiko
+      let rawRisiko = d.kriteriaRisiko || 'Belum Dinilai';
+      let mRisiko = (sRisiko === 'All') || (rawRisiko === sRisiko);
+      
       if (d.isoDate) { 
         const dDate = new Date(d.isoDate); 
         if (parsedMonth !== 'All') mMonth = (dDate.getMonth() === parsedMonth); 
@@ -487,8 +506,10 @@
       } else { 
         if (parsedMonth !== 'All' || parsedYear !== 'All') return false; 
       } 
-      return mStatus && mPic && mMonth && mYear; 
+      
+      return mStatus && mPic && mMonth && mYear && mBanding && mRisiko; 
     });
+    
     renderList(true); 
   }
 
@@ -505,33 +526,15 @@
       let mPic = isAllPic || selectedPics.includes(d.pic); 
       let mMonth = true; 
       let mYear = true; 
-      
-      if (d.isoDate) { 
-        const dDate = new Date(d.isoDate); 
-        if (parsedMonth !== 'All') mMonth = (dDate.getMonth() === parsedMonth); 
-        if (parsedYear !== 'All') mYear = (dDate.getFullYear() === parsedYear); 
-      } else { 
-        if (parsedMonth !== 'All' || parsedYear !== 'All') return false; 
-      } 
+      if (d.isoDate) { const dDate = new Date(d.isoDate); if (parsedMonth !== 'All') mMonth = (dDate.getMonth() === parsedMonth); if (parsedYear !== 'All') mYear = (dDate.getFullYear() === parsedYear); } else { if (parsedMonth !== 'All' || parsedYear !== 'All') return false; } 
       return mPic && mMonth && mYear; 
     }); 
     updateCharts(dbFiltered);
     
     if (allSapData && allSapData.length > 0) { 
       const sapFiltered = allSapData.filter(d => { 
-        let mMonth = true; 
-        let mYear = true; 
-        let dept = d.departemen || d.pic; 
-        let mPic = isAllPic || selectedPics.includes(dept); 
-        let tgl = d.tanggal || d.isoDate; 
-        
-        if (tgl) { 
-          const dDate = new Date(tgl); 
-          if (parsedMonth !== 'All') mMonth = (dDate.getMonth() === parsedMonth); 
-          if (parsedYear !== 'All') mYear = (dDate.getFullYear() === parsedYear); 
-        } else { 
-          if (parsedMonth !== 'All' || parsedYear !== 'All') return false; 
-        } 
+        let mMonth = true; let mYear = true; let dept = d.departemen || d.pic; let mPic = isAllPic || selectedPics.includes(dept); let tgl = d.tanggal || d.isoDate; 
+        if (tgl) { const dDate = new Date(tgl); if (parsedMonth !== 'All') mMonth = (dDate.getMonth() === parsedMonth); if (parsedYear !== 'All') mYear = (dDate.getFullYear() === parsedYear); } else { if (parsedMonth !== 'All' || parsedYear !== 'All') return false; } 
         return mMonth && mYear && mPic; 
       }); 
       updateSapCharts(sapFiltered, dbFiltered); 
@@ -565,7 +568,29 @@
   }
 
   function toggleBandingType() { document.getElementById('banding-target-container').style.display = (document.getElementById('banding-type').value === 'UBAH_PIC') ? 'block' : 'none'; }
-  function openModal(id, srcImg) { if(id === 'imageModal') { if(!srcImg || srcImg === errImg) return; document.getElementById('zoomed-img').src = srcImg; modalScale = 1; posX = 0; posY = 0; updateModalTransform(); } else if (id === 'editPicModal') { const e = document.getElementById('edit-pic-select'); e.innerHTML = ''; globalPicList.forEach(pic => { e.innerHTML += `<option value="${escapeHTML(pic)}">${escapeHTML(pic)}</option>`; }); e.value = globalPicList.includes(selectedItem.pic) ? selectedItem.pic : globalPicList[0]; } else if (id === 'bandingModal') { document.getElementById('banding-reason').value = ""; document.getElementById('banding-type').value = "LAINNYA"; toggleBandingType(); const t = document.getElementById('banding-target-pic'); t.innerHTML = ''; globalPicList.forEach(pic => { t.innerHTML += `<option value="${escapeHTML(pic)}">${escapeHTML(pic)}</option>`; }); } document.getElementById(id).style.display = "block"; }
+  
+  function openModal(id, srcImg) { 
+    if(id === 'imageModal') { 
+      if(!srcImg || srcImg === errImg) return; 
+      document.getElementById('zoomed-img').src = srcImg; modalScale = 1; posX = 0; posY = 0; updateModalTransform(); 
+    } else if (id === 'editPicModal') { 
+      const e = document.getElementById('edit-pic-select'); 
+      // OPTIMASI DOM Edit PIC
+      let picOpts = '';
+      globalPicList.forEach(pic => { picOpts += `<option value="${escapeHTML(pic)}">${escapeHTML(pic)}</option>`; }); 
+      e.innerHTML = picOpts;
+      e.value = globalPicList.includes(selectedItem.pic) ? selectedItem.pic : globalPicList[0]; 
+    } else if (id === 'bandingModal') { 
+      document.getElementById('banding-reason').value = ""; document.getElementById('banding-type').value = "LAINNYA"; toggleBandingType(); 
+      const t = document.getElementById('banding-target-pic'); 
+      // OPTIMASI DOM Banding PIC
+      let bHtml = '';
+      globalPicList.forEach(pic => { bHtml += `<option value="${escapeHTML(pic)}">${escapeHTML(pic)}</option>`; }); 
+      t.innerHTML = bHtml;
+    } 
+    document.getElementById(id).style.display = "block"; 
+  }
+  
   function closeModal(id) { document.getElementById(id).style.display = "none"; }
   function closeModalOutside(e) { if (e.target.classList.contains('modal')) closeModal(e.target.id); }
 
