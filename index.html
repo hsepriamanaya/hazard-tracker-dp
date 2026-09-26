@@ -191,7 +191,7 @@
     <div class="filter-grid">
       <select id="f-status" onchange="applyFilters()"><option value="All">Semua Status</option><option value="Open" selected>Open</option><option value="Progress">Progress</option><option value="Closed">Closed</option></select>
       
-      <!-- TAMBAHAN: Filter Banding & Risiko -->
+      <!-- Filter Banding & Risiko -->
       <select id="f-banding" onchange="applyFilters()">
         <option value="All">Semua Status Banding</option>
         <option value="Pending">Pending (Menunggu)</option>
@@ -202,7 +202,7 @@
       <select id="f-risiko" onchange="applyFilters()">
         <option value="All">Semua Kriteria Risiko</option>
       </select>
-      <!-- END TAMBAHAN -->
+      <!-- END Filter -->
 
       <div class="multiselect-container" id="f-pic-container">
         <div class="select-box" onclick="toggleDropdown('f-pic-dropdown')">
@@ -451,13 +451,11 @@
     
     if(isSilent) return; 
     
-    // OPTIMASI DOM: Hindari += berlebihan di dalam loop DOM
     let yearHtml = '<option value="All">Semua Tahun</option>';
     Array.from(yearSet).sort((a,b)=>b-a).forEach(yr => { yearHtml += `<option value="${yr}">${yr}</option>`; });
     document.getElementById('f-year').innerHTML = yearHtml;
     document.getElementById('db-f-year').innerHTML = yearHtml;
 
-    // Tambahkan Kriteria Risiko ke Select Box
     const fRisiko = document.getElementById('f-risiko');
     if (fRisiko) {
       let risikoHtml = '<option value="All">Semua Kriteria Risiko</option>';
@@ -474,7 +472,6 @@
     const sMonth = document.getElementById('f-month').value; 
     const sYear = document.getElementById('f-year').value;
     
-    // Tarik Value Filter Banding & Risiko
     const sBanding = document.getElementById('f-banding') ? document.getElementById('f-banding').value : 'All';
     const sRisiko = document.getElementById('f-risiko') ? document.getElementById('f-risiko').value : 'All';
 
@@ -487,7 +484,6 @@
       let mMonth = true; 
       let mYear = true; 
       
-      // Filter Banding
       let rawBanding = d.bandingStatus || '';
       let mBanding = true;
       if (sBanding !== 'All') {
@@ -495,7 +491,6 @@
         else { mBanding = (rawBanding === sBanding); }
       }
 
-      // Filter Risiko
       let rawRisiko = d.kriteriaRisiko || 'Belum Dinilai';
       let mRisiko = (sRisiko === 'All') || (rawRisiko === sRisiko);
       
@@ -547,11 +542,33 @@
     const container = document.getElementById('list-container'); const loadMoreBtn = document.getElementById('load-more-container');
     if (reset) { container.innerHTML = ''; currentlyRendered = 0; }
     if (currentFilteredData.length === 0) { container.innerHTML = `<div style="text-align:center; padding:50px; color:#aaa; width:100%; grid-column: 1 / -1;">Tidak ada data sesuai filter</div>`; loadMoreBtn.style.display = 'none'; return; }
+    
     const sliceData = currentFilteredData.slice(currentlyRendered, currentlyRendered + itemsPerPage);
     const htmlCards = sliceData.map(d => {
-      let escBahaya = escapeHTML(d.bahaya); let shortBahaya = escBahaya.substring(0, 80) + (escBahaya.length > 80 ? '...' : ''); let bandingBadge = (d.bandingStatus === 'Pending') ? `<div class="banding-badge"><i class="fa-solid fa-triangle-exclamation"></i> BANDING</div>` : '';
-      return `<div class="card" onclick="openDetail('${d.id}')"><div class="img-container"><div class="status-badge-img status-${d.status}">${d.status}</div>${bandingBadge}<img src="${d.foto || errImg}" loading="lazy" onerror="this.onerror=null; this.src='${errImg}'"></div><div class="card-content"><div class="card-title">${escapeHTML(d.kategori)}</div><div class="card-sub"><i class="fa-solid fa-hard-hat"></i> PIC: ${escapeHTML(d.pic)}</div><div class="card-sub"><i class="fa-solid fa-location-dot"></i> ${escapeHTML(d.lokasi)}</div><div class="card-desc">${shortBahaya}</div><div style="margin-top:10px; font-size:0.7rem; color:#aaa;"><i class="fa-regular fa-clock"></i> ${escapeHTML(d.waktuTemuan)}</div></div></div>`
+      let escBahaya = escapeHTML(d.bahaya); 
+      let shortBahaya = escBahaya.substring(0, 80) + (escBahaya.length > 80 ? '...' : ''); 
+      let bandingBadge = (d.bandingStatus === 'Pending') ? `<div class="banding-badge"><i class="fa-solid fa-triangle-exclamation"></i> BANDING</div>` : '';
+      
+      let risikoText = d.kriteriaRisiko ? escapeHTML(d.kriteriaRisiko) : 'Belum Dinilai';
+      let risikoBadge = `<span style="font-size: 0.65rem; background: #e2e8f0; color: #334155; padding: 3px 8px; border-radius: 12px; font-weight: 600; display: inline-block; margin-top: 5px;"><i class="fa-solid fa-gauge-high"></i> Risiko: ${risikoText}</span>`;
+
+      return `<div class="card" onclick="openDetail('${d.id}')">
+                <div class="img-container">
+                  <div class="status-badge-img status-${d.status}">${d.status}</div>
+                  ${bandingBadge}
+                  <img src="${d.foto || errImg}" loading="lazy" onerror="this.onerror=null; this.src='${errImg}'">
+                </div>
+                <div class="card-content">
+                  <div class="card-title">${escapeHTML(d.kategori)}</div>
+                  <div style="margin-bottom: 10px;">${risikoBadge}</div>
+                  <div class="card-sub"><i class="fa-solid fa-hard-hat"></i> PIC: ${escapeHTML(d.pic)}</div>
+                  <div class="card-sub"><i class="fa-solid fa-location-dot"></i> ${escapeHTML(d.lokasi)}</div>
+                  <div class="card-desc">${shortBahaya}</div>
+                  <div style="margin-top:10px; font-size:0.7rem; color:#aaa;"><i class="fa-regular fa-clock"></i> ${escapeHTML(d.waktuTemuan)}</div>
+                </div>
+              </div>`
     }).join('');
+    
     container.insertAdjacentHTML('beforeend', htmlCards); currentlyRendered += sliceData.length;
     if (currentlyRendered >= currentFilteredData.length) { loadMoreBtn.style.display = 'none'; } else { loadMoreBtn.style.display = 'block'; }
   }
@@ -560,10 +577,55 @@
 
   function openDetail(id) {
     selectedItem = allData.find(d => d.id == id); const content = document.getElementById('detail-content');
-    let closingSection = ""; if (selectedItem.status === "Closed" || selectedItem.fotoClosing !== "") { let afterImgSrc = selectedItem.fotoClosing || errImg; closingSection = `<div class="detail-img-box" style="border: 3px solid var(--success);" onclick="openModal('imageModal', '${afterImgSrc}')"><div class="img-label" style="background:var(--success)">AFTER / HASIL PERBAIKAN</div><div class="img-hint"><i class="fa-solid fa-magnifying-glass"></i> Zoom</div><img src="${afterImgSrc}" onerror="this.onerror=null; this.src='${errImg}'"></div><div class="closing-box"><div class="info-label" style="color:var(--success)">Informasi Penutupan</div><div class="info-value" style="margin-top:5px;"><i class="fa-solid fa-user-check"></i> <b>Eksekutor:</b> ${escapeHTML(selectedItem.closingBy) || '-'}<br><i class="fa-solid fa-calendar-check"></i> <b>Tgl Closing:</b> ${escapeHTML(selectedItem.tanggalClosing) || '-'}</div></div>`; }
-    let bandingAlert = ""; if (selectedItem.bandingStatus === 'Pending') { let badgeTipe = ""; let alasanTeks = escapeHTML(selectedItem.bandingAlasan); try { let parsed = JSON.parse(selectedItem.bandingAlasan); alasanTeks = escapeHTML(parsed.pesan); if (parsed.tipe === 'UBAH_PIC') badgeTipe = `<span style="background:#003366; color:white; padding:4px 10px; border-radius:5px; font-size:0.75rem; font-weight:bold; display:inline-block; margin-bottom:10px;"><i class="fa-solid fa-building-user"></i> Usulan Ubah PIC ke: ${escapeHTML(parsed.target)}</span><br>`; else if (parsed.tipe === 'HAPUS') badgeTipe = `<span style="background:var(--danger); color:white; padding:4px 10px; border-radius:5px; font-size:0.75rem; font-weight:bold; display:inline-block; margin-bottom:10px;"><i class="fa-solid fa-trash-can"></i> Pengajuan Hapus Temuan</span><br>`; } catch(e) {} bandingAlert = `<div class="report-box" style="border-left-color: var(--warning); background: #fffdf5;"><div class="info-label" style="color: #b8860b;"><i class="fa-solid fa-triangle-exclamation"></i> MENUNGGU KEPUTUSAN BANDING</div><div class="info-value" style="margin-top:10px;">${badgeTipe}<b>Alasan Detail:</b> ${alasanTeks}</div>${isHseMode ? `<div style="margin-top:15px; display:flex; gap:10px;"><button class="btn-action btn-success" onclick="adminResolveBanding('Disetujui')"><i class="fa-solid fa-check"></i> Setujui & Eksekusi</button><button class="btn-action btn-danger" onclick="adminResolveBanding('Ditolak')"><i class="fa-solid fa-xmark"></i> Tolak</button></div>` : ''}</div>`; } else if (selectedItem.bandingStatus === 'Disetujui' || selectedItem.bandingStatus === 'Ditolak') { let bColor = selectedItem.bandingStatus === 'Disetujui' ? 'var(--success)' : 'var(--danger)'; bandingAlert = `<div class="report-box" style="border-left-color: ${bColor};"><div class="info-label" style="color: ${bColor};"><i class="fa-solid fa-gavel"></i> HASIL BANDING ADMIN: ${selectedItem.bandingStatus.toUpperCase()}</div></div>`; }
-    content.innerHTML = `<div class="detail-img-box" onclick="openModal('imageModal', '${selectedItem.foto || errImg}')"><div class="img-label">BEFORE / TEMUAN AWAL</div><div class="img-hint"><i class="fa-solid fa-magnifying-glass"></i> Zoom</div><img src="${selectedItem.foto || errImg}" onerror="this.onerror=null; this.src='${errImg}'"></div>${closingSection}${bandingAlert}<div class="info-card" style="margin-top:20px;"><div class="info-item"><div class="info-label">Departemen / PIC Kontraktor</div><div class="info-value" style="font-weight:600; color:var(--primary); display:flex; align-items:center; gap:10px; justify-content: space-between;"><span>${escapeHTML(selectedItem.pic)}</span>${isHseMode ? `<button class="btn-action" style="background:#f0f2f5; color:#333; padding:5px 12px; font-size:0.75rem; border:1px solid #ccc; border-radius:6px;" onclick="openModal('editPicModal')"><i class="fa-solid fa-building-circle-gear"></i> Ubah PIC</button>` : ''}</div></div><hr style="border:0; border-top:1px solid #eee; margin:15px 0;"><div class="info-item"><div class="info-label">Detail Lokasi Temuan</div><div class="info-value">${escapeHTML(selectedItem.lokasi)}</div></div><div class="info-item"><div class="info-label">Area Kerja (Zone)</div><div class="info-value">${escapeHTML(selectedItem.areaKerja)}</div></div><div class="info-item"><div class="info-label">Waktu Kejadian / Temuan</div><div class="info-value">${escapeHTML(selectedItem.waktuTemuan)}</div></div><div class="report-box"><div class="info-label" style="color:var(--danger)">Bahaya yang dilaporkan</div><div class="info-value" style="margin-top:5px;">${escapeHTML(selectedItem.bahaya)}</div></div></div>`;
-    const actionArea = document.getElementById('action-area'); actionArea.innerHTML = `<button class="btn-full btn-primary" onclick="openClosingForm()"><i class="fa-solid fa-pen-to-square"></i> UPDATE STATUS / CLOSING</button>`; if (isHseMode) { actionArea.innerHTML += `<button class="btn-full btn-danger" style="margin-top:10px;" onclick="deleteHazardBtn()"><i class="fa-solid fa-trash"></i> HAPUS TEMUAN PERMANEN</button>`; } else { if (selectedItem.bandingStatus !== 'Pending') { actionArea.innerHTML += `<button class="btn-full btn-warning" style="margin-top:10px;" onclick="openModal('bandingModal')"><i class="fa-solid fa-scale-unbalanced"></i> KLARIFIKASI / BANDING TEMUAN</button>`; } }
+    let closingSection = ""; 
+    
+    if (selectedItem.status === "Closed" || selectedItem.fotoClosing !== "") { 
+      let afterImgSrc = selectedItem.fotoClosing || errImg; 
+      closingSection = `<div class="detail-img-box" style="border: 3px solid var(--success);" onclick="openModal('imageModal', '${afterImgSrc}')"><div class="img-label" style="background:var(--success)">AFTER / HASIL PERBAIKAN</div><div class="img-hint"><i class="fa-solid fa-magnifying-glass"></i> Zoom</div><img src="${afterImgSrc}" onerror="this.onerror=null; this.src='${errImg}'"></div><div class="closing-box"><div class="info-label" style="color:var(--success)">Informasi Penutupan</div><div class="info-value" style="margin-top:5px;"><i class="fa-solid fa-user-check"></i> <b>Eksekutor:</b> ${escapeHTML(selectedItem.closingBy) || '-'}<br><i class="fa-solid fa-calendar-check"></i> <b>Tgl Closing:</b> ${escapeHTML(selectedItem.tanggalClosing) || '-'}</div></div>`; 
+    }
+    
+    let bandingAlert = ""; 
+    let badgeTipe = ""; 
+    let alasanTeks = escapeHTML(selectedItem.bandingAlasan || "-"); 
+    
+    if (selectedItem.bandingAlasan && selectedItem.bandingAlasan !== "" && selectedItem.bandingAlasan !== "-") {
+      try { 
+        let parsed = JSON.parse(selectedItem.bandingAlasan); 
+        alasanTeks = escapeHTML(parsed.pesan); 
+        if (parsed.tipe === 'UBAH_PIC') badgeTipe = `<span style="background:#003366; color:white; padding:4px 10px; border-radius:5px; font-size:0.75rem; font-weight:bold; display:inline-block; margin-bottom:10px;"><i class="fa-solid fa-building-user"></i> Usulan Ubah PIC ke: ${escapeHTML(parsed.target)}</span><br>`; 
+        else if (parsed.tipe === 'HAPUS') badgeTipe = `<span style="background:var(--danger); color:white; padding:4px 10px; border-radius:5px; font-size:0.75rem; font-weight:bold; display:inline-block; margin-bottom:10px;"><i class="fa-solid fa-trash-can"></i> Pengajuan Hapus Temuan</span><br>`; 
+      } catch(e) {}
+    }
+
+    if (selectedItem.bandingStatus === 'Pending') { 
+      bandingAlert = `<div class="report-box" style="border-left-color: var(--warning); background: #fffdf5;"><div class="info-label" style="color: #b8860b;"><i class="fa-solid fa-triangle-exclamation"></i> MENUNGGU KEPUTUSAN BANDING</div><div class="info-value" style="margin-top:10px;">${badgeTipe}<b>Alasan Detail:</b> ${alasanTeks}</div>${isHseMode ? `<div style="margin-top:15px; display:flex; gap:10px;"><button class="btn-action btn-success" onclick="adminResolveBanding('Disetujui')"><i class="fa-solid fa-check"></i> Setujui & Eksekusi</button><button class="btn-action btn-danger" onclick="adminResolveBanding('Ditolak')"><i class="fa-solid fa-xmark"></i> Tolak</button></div>` : ''}</div>`; 
+    } else if (selectedItem.bandingStatus === 'Disetujui' || selectedItem.bandingStatus === 'Ditolak') { 
+      let bColor = selectedItem.bandingStatus === 'Disetujui' ? 'var(--success)' : 'var(--danger)'; 
+      bandingAlert = `<div class="report-box" style="border-left-color: ${bColor}; background: #f8f9fa;"><div class="info-label" style="color: ${bColor};"><i class="fa-solid fa-gavel"></i> HASIL BANDING ADMIN: ${selectedItem.bandingStatus.toUpperCase()}</div><div class="info-value" style="margin-top:10px; font-size: 0.85rem;">${badgeTipe}<b>Rincian Pengajuan Banding:</b> ${alasanTeks}</div></div>`; 
+    }
+
+    let risikoText = selectedItem.kriteriaRisiko ? escapeHTML(selectedItem.kriteriaRisiko) : 'Belum Dinilai';
+
+    content.innerHTML = `<div class="detail-img-box" onclick="openModal('imageModal', '${selectedItem.foto || errImg}')"><div class="img-label">BEFORE / TEMUAN AWAL</div><div class="img-hint"><i class="fa-solid fa-magnifying-glass"></i> Zoom</div><img src="${selectedItem.foto || errImg}" onerror="this.onerror=null; this.src='${errImg}'"></div>${closingSection}${bandingAlert}
+    
+    <div class="info-card" style="margin-top:20px;">
+      <div class="info-item">
+        <div class="info-label">Kriteria Risiko Tingkat Bahaya</div>
+        <div class="info-value" style="font-weight:bold; color:var(--primary); font-size:1.1rem;"><i class="fa-solid fa-gauge-high"></i> ${risikoText}</div>
+      </div>
+      <hr style="border:0; border-top:1px solid #eee; margin:15px 0;">
+      
+      <div class="info-item"><div class="info-label">Departemen / PIC Kontraktor</div><div class="info-value" style="font-weight:600; color:var(--primary); display:flex; align-items:center; gap:10px; justify-content: space-between;"><span>${escapeHTML(selectedItem.pic)}</span>${isHseMode ? `<button class="btn-action" style="background:#f0f2f5; color:#333; padding:5px 12px; font-size:0.75rem; border:1px solid #ccc; border-radius:6px;" onclick="openModal('editPicModal')"><i class="fa-solid fa-building-circle-gear"></i> Ubah PIC</button>` : ''}</div></div><hr style="border:0; border-top:1px solid #eee; margin:15px 0;"><div class="info-item"><div class="info-label">Detail Lokasi Temuan</div><div class="info-value">${escapeHTML(selectedItem.lokasi)}</div></div><div class="info-item"><div class="info-label">Area Kerja (Zone)</div><div class="info-value">${escapeHTML(selectedItem.areaKerja)}</div></div><div class="info-item"><div class="info-label">Waktu Kejadian / Temuan</div><div class="info-value">${escapeHTML(selectedItem.waktuTemuan)}</div></div><div class="report-box"><div class="info-label" style="color:var(--danger)">Bahaya yang dilaporkan</div><div class="info-value" style="margin-top:5px;">${escapeHTML(selectedItem.bahaya)}</div></div></div>`;
+    
+    const actionArea = document.getElementById('action-area'); 
+    actionArea.innerHTML = `<button class="btn-full btn-primary" onclick="openClosingForm()"><i class="fa-solid fa-pen-to-square"></i> UPDATE STATUS / CLOSING</button>`; 
+    if (isHseMode) { 
+      actionArea.innerHTML += `<button class="btn-full btn-danger" style="margin-top:10px;" onclick="deleteHazardBtn()"><i class="fa-solid fa-trash"></i> HAPUS TEMUAN PERMANEN</button>`; 
+    } else { 
+      if (selectedItem.bandingStatus !== 'Pending') { 
+        actionArea.innerHTML += `<button class="btn-full btn-warning" style="margin-top:10px;" onclick="openModal('bandingModal')"><i class="fa-solid fa-scale-unbalanced"></i> KLARIFIKASI / BANDING TEMUAN</button>`; 
+      } 
+    }
     document.getElementById('close-status').value = selectedItem.status; navigateTo('detail');
   }
 
@@ -575,7 +637,6 @@
       document.getElementById('zoomed-img').src = srcImg; modalScale = 1; posX = 0; posY = 0; updateModalTransform(); 
     } else if (id === 'editPicModal') { 
       const e = document.getElementById('edit-pic-select'); 
-      // OPTIMASI DOM Edit PIC
       let picOpts = '';
       globalPicList.forEach(pic => { picOpts += `<option value="${escapeHTML(pic)}">${escapeHTML(pic)}</option>`; }); 
       e.innerHTML = picOpts;
@@ -583,7 +644,6 @@
     } else if (id === 'bandingModal') { 
       document.getElementById('banding-reason').value = ""; document.getElementById('banding-type').value = "LAINNYA"; toggleBandingType(); 
       const t = document.getElementById('banding-target-pic'); 
-      // OPTIMASI DOM Banding PIC
       let bHtml = '';
       globalPicList.forEach(pic => { bHtml += `<option value="${escapeHTML(pic)}">${escapeHTML(pic)}</option>`; }); 
       t.innerHTML = bHtml;
