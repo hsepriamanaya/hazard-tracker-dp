@@ -626,7 +626,7 @@
       actionArea.innerHTML += `<button class="btn-full btn-danger" style="margin-top:10px;" onclick="deleteHazardBtn()"><i class="fa-solid fa-trash"></i> HAPUS TEMUAN PERMANEN</button>`; 
     } else { 
       if (selectedItem.bandingStatus !== 'Pending') { 
-        actionArea.innerHTML += `<button class="btn-full btn-warning" style="margin-top:10px;" onclick="openModal('bandingModal')"><i class="fa-solid fa-scale-unbalanced"></i> KLARIFIKASI / PENGAJUAN RE-OPEN</button>`; 
+        actionArea.innerHTML += `<button class="btn-full btn-warning" style="margin-top:10px;" onclick="openModal('bandingModal')"><i class="fa-solid fa-scale-unbalanced"></i> KLARIFIKASI / BANDING TEMUAN</button>`; 
       } 
     }
     document.getElementById('close-status').value = selectedItem.status; navigateTo('detail');
