@@ -150,10 +150,8 @@
     <h3>Ajukan Klarifikasi / Banding</h3>
     <div class="info-item" style="text-align:left;">
       <label class="info-label">Pilih Jenis Banding</label>
+      <!-- Opsi akan diisi secara dinamis oleh JavaScript agar opsi RE-OPEN hanya muncul untuk temuan CLOSED -->
       <select id="banding-type" class="form-input" onchange="toggleBandingType()">
-        <option value="LAINNYA">Hanya Klarifikasi Tambahan</option>
-        <option value="UBAH_PIC">Salah PIC (Minta Ubah Departemen)</option>
-        <option value="HAPUS">Temuan Tidak Valid (Minta Hapus)</option>
       </select>
     </div>
     <div id="banding-target-container" class="info-item" style="display:none; text-align:left;">
@@ -191,7 +189,6 @@
     <div class="filter-grid">
       <select id="f-status" onchange="applyFilters()"><option value="All">Semua Status</option><option value="Open" selected>Open</option><option value="Progress">Progress</option><option value="Closed">Closed</option></select>
       
-      <!-- Filter Banding & Risiko -->
       <select id="f-banding" onchange="applyFilters()">
         <option value="All">Semua Status Banding</option>
         <option value="Pending">Pending (Menunggu)</option>
@@ -202,7 +199,6 @@
       <select id="f-risiko" onchange="applyFilters()">
         <option value="All">Semua Kriteria Risiko</option>
       </select>
-      <!-- END Filter -->
 
       <div class="multiselect-container" id="f-pic-container">
         <div class="select-box" onclick="toggleDropdown('f-pic-dropdown')">
@@ -592,13 +588,21 @@
       try { 
         let parsed = JSON.parse(selectedItem.bandingAlasan); 
         alasanTeks = escapeHTML(parsed.pesan); 
-        if (parsed.tipe === 'UBAH_PIC') badgeTipe = `<span style="background:#003366; color:white; padding:4px 10px; border-radius:5px; font-size:0.75rem; font-weight:bold; display:inline-block; margin-bottom:10px;"><i class="fa-solid fa-building-user"></i> Usulan Ubah PIC ke: ${escapeHTML(parsed.target)}</span><br>`; 
-        else if (parsed.tipe === 'HAPUS') badgeTipe = `<span style="background:var(--danger); color:white; padding:4px 10px; border-radius:5px; font-size:0.75rem; font-weight:bold; display:inline-block; margin-bottom:10px;"><i class="fa-solid fa-trash-can"></i> Pengajuan Hapus Temuan</span><br>`; 
+        // MODIFIKASI: Keterangan label dibuat sangat jelas dan tegas
+        if (parsed.tipe === 'UBAH_PIC') {
+            badgeTipe = `<span style="background:#003366; color:white; padding:4px 10px; border-radius:5px; font-size:0.75rem; font-weight:bold; display:inline-block; margin-bottom:10px;"><i class="fa-solid fa-building-user"></i> <b>Permintaan:</b> Ganti PIC ke ${escapeHTML(parsed.target)}</span><br>`; 
+        } else if (parsed.tipe === 'HAPUS') {
+            badgeTipe = `<span style="background:var(--danger); color:white; padding:4px 10px; border-radius:5px; font-size:0.75rem; font-weight:bold; display:inline-block; margin-bottom:10px;"><i class="fa-solid fa-trash-can"></i> <b>Permintaan:</b> Hapus Temuan (Tidak Valid)</span><br>`; 
+        } else if (parsed.tipe === 'REOPEN') {
+            badgeTipe = `<span style="background:#ff851b; color:white; padding:4px 10px; border-radius:5px; font-size:0.75rem; font-weight:bold; display:inline-block; margin-bottom:10px;"><i class="fa-solid fa-folder-open"></i> <b>Permintaan:</b> Open Kembali (Bukti Closing Tidak Sesuai)</span><br>`;
+        } else {
+            badgeTipe = `<span style="background:#17a2b8; color:white; padding:4px 10px; border-radius:5px; font-size:0.75rem; font-weight:bold; display:inline-block; margin-bottom:10px;"><i class="fa-solid fa-comment-dots"></i> <b>Permintaan:</b> Klarifikasi / Keterangan Tambahan</span><br>`;
+        }
       } catch(e) {}
     }
 
     if (selectedItem.bandingStatus === 'Pending') { 
-      bandingAlert = `<div class="report-box" style="border-left-color: var(--warning); background: #fffdf5;"><div class="info-label" style="color: #b8860b;"><i class="fa-solid fa-triangle-exclamation"></i> MENUNGGU KEPUTUSAN BANDING</div><div class="info-value" style="margin-top:10px;">${badgeTipe}<b>Alasan Detail:</b> ${alasanTeks}</div>${isHseMode ? `<div style="margin-top:15px; display:flex; gap:10px;"><button class="btn-action btn-success" onclick="adminResolveBanding('Disetujui')"><i class="fa-solid fa-check"></i> Setujui & Eksekusi</button><button class="btn-action btn-danger" onclick="adminResolveBanding('Ditolak')"><i class="fa-solid fa-xmark"></i> Tolak</button></div>` : ''}</div>`; 
+      bandingAlert = `<div class="report-box" style="border-left-color: var(--warning); background: #fffdf5;"><div class="info-label" style="color: #b8860b;"><i class="fa-solid fa-triangle-exclamation"></i> MENUNGGU KEPUTUSAN BANDING</div><div class="info-value" style="margin-top:10px;">${badgeTipe}<b>Alasan Detail:</b> ${alasanTeks}</div>${isHseMode ? `<div style="margin-top:15px; display:flex; gap:10px;"><button class="btn-action btn-success" onclick="adminResolveBanding('Disetujui')"><i class="fa-solid fa-check"></i> Setujui Pengajuan</button><button class="btn-action btn-danger" onclick="adminResolveBanding('Ditolak')"><i class="fa-solid fa-xmark"></i> Tolak</button></div>` : ''}</div>`; 
     } else if (selectedItem.bandingStatus === 'Disetujui' || selectedItem.bandingStatus === 'Ditolak') { 
       let bColor = selectedItem.bandingStatus === 'Disetujui' ? 'var(--success)' : 'var(--danger)'; 
       bandingAlert = `<div class="report-box" style="border-left-color: ${bColor}; background: #f8f9fa;"><div class="info-label" style="color: ${bColor};"><i class="fa-solid fa-gavel"></i> HASIL BANDING ADMIN: ${selectedItem.bandingStatus.toUpperCase()}</div><div class="info-value" style="margin-top:10px; font-size: 0.85rem;">${badgeTipe}<b>Rincian Pengajuan Banding:</b> ${alasanTeks}</div></div>`; 
@@ -623,7 +627,7 @@
       actionArea.innerHTML += `<button class="btn-full btn-danger" style="margin-top:10px;" onclick="deleteHazardBtn()"><i class="fa-solid fa-trash"></i> HAPUS TEMUAN PERMANEN</button>`; 
     } else { 
       if (selectedItem.bandingStatus !== 'Pending') { 
-        actionArea.innerHTML += `<button class="btn-full btn-warning" style="margin-top:10px;" onclick="openModal('bandingModal')"><i class="fa-solid fa-scale-unbalanced"></i> KLARIFIKASI / BANDING TEMUAN</button>`; 
+        actionArea.innerHTML += `<button class="btn-full btn-warning" style="margin-top:10px;" onclick="openModal('bandingModal')"><i class="fa-solid fa-scale-unbalanced"></i> KLARIFIKASI / PENGAJUAN RE-OPEN</button>`; 
       } 
     }
     document.getElementById('close-status').value = selectedItem.status; navigateTo('detail');
@@ -642,7 +646,20 @@
       e.innerHTML = picOpts;
       e.value = globalPicList.includes(selectedItem.pic) ? selectedItem.pic : globalPicList[0]; 
     } else if (id === 'bandingModal') { 
-      document.getElementById('banding-reason').value = ""; document.getElementById('banding-type').value = "LAINNYA"; toggleBandingType(); 
+      // MODIFIKASI: Mengatur Opsi Modal secara Dinamis
+      const typeSel = document.getElementById('banding-type');
+      typeSel.innerHTML = `
+        <option value="LAINNYA">Hanya Klarifikasi Tambahan</option>
+        <option value="UBAH_PIC">Salah PIC (Minta Ubah Departemen)</option>
+        <option value="HAPUS">Temuan Tidak Valid (Minta Hapus)</option>
+      `;
+      // Opsi RE-OPEN HANYA muncul jika status temuan adalah 'Closed'
+      if (selectedItem.status === 'Closed') {
+        typeSel.innerHTML += `<option value="REOPEN">Bukti Closing Tidak Sesuai (Minta Open Kembali)</option>`;
+      }
+
+      document.getElementById('banding-reason').value = ""; 
+      toggleBandingType(); 
       const t = document.getElementById('banding-target-pic'); 
       let bHtml = '';
       globalPicList.forEach(pic => { bHtml += `<option value="${escapeHTML(pic)}">${escapeHTML(pic)}</option>`; }); 
@@ -679,7 +696,9 @@
   }
   
   function adminResolveBanding(action) { 
-    showCustomConfirm("Konfirmasi Eksekusi", `Anda yakin ingin <b>${action}</b> banding ini?`, function() { 
+    // Catatan untuk Admin jika menyetujui RE-OPEN, admin tetap harus ubah status secara manual
+    let adminMsg = `Anda yakin ingin <b>${action}</b> banding ini?`;
+    showCustomConfirm("Konfirmasi Eksekusi", adminMsg, function() { 
       toggleLoading(true); 
       callApi('resolveBanding', { id: selectedItem.id, status: action }).then(res => { forceServerFetch(res.message); }).catch(e => { toggleLoading(false); showToast(e.message, "error"); }); 
     }); 
