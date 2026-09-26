@@ -588,7 +588,6 @@
       try { 
         let parsed = JSON.parse(selectedItem.bandingAlasan); 
         alasanTeks = escapeHTML(parsed.pesan); 
-        // MODIFIKASI: Keterangan label dibuat sangat jelas dan tegas
         if (parsed.tipe === 'UBAH_PIC') {
             badgeTipe = `<span style="background:#003366; color:white; padding:4px 10px; border-radius:5px; font-size:0.75rem; font-weight:bold; display:inline-block; margin-bottom:10px;"><i class="fa-solid fa-building-user"></i> <b>Permintaan:</b> Ganti PIC ke ${escapeHTML(parsed.target)}</span><br>`; 
         } else if (parsed.tipe === 'HAPUS') {
@@ -646,14 +645,12 @@
       e.innerHTML = picOpts;
       e.value = globalPicList.includes(selectedItem.pic) ? selectedItem.pic : globalPicList[0]; 
     } else if (id === 'bandingModal') { 
-      // MODIFIKASI: Mengatur Opsi Modal secara Dinamis
       const typeSel = document.getElementById('banding-type');
       typeSel.innerHTML = `
         <option value="LAINNYA">Hanya Klarifikasi Tambahan</option>
         <option value="UBAH_PIC">Salah PIC (Minta Ubah Departemen)</option>
         <option value="HAPUS">Temuan Tidak Valid (Minta Hapus)</option>
       `;
-      // Opsi RE-OPEN HANYA muncul jika status temuan adalah 'Closed'
       if (selectedItem.status === 'Closed') {
         typeSel.innerHTML += `<option value="REOPEN">Bukti Closing Tidak Sesuai (Minta Open Kembali)</option>`;
       }
@@ -696,7 +693,6 @@
   }
   
   function adminResolveBanding(action) { 
-    // Catatan untuk Admin jika menyetujui RE-OPEN, admin tetap harus ubah status secara manual
     let adminMsg = `Anda yakin ingin <b>${action}</b> banding ini?`;
     showCustomConfirm("Konfirmasi Eksekusi", adminMsg, function() { 
       toggleLoading(true); 
@@ -750,8 +746,27 @@
       let area = d.areaKerja || 'Lain-lain'; countArea[area] = (countArea[area] || 0) + 1; 
       let pic = d.pic || 'Belum Ada PIC'; countPic[pic] = (countPic[pic] || 0) + 1; 
       
-      if (jenisLaporan === 'KTA' && d.detailKTA && d.detailKTA.trim() !== "") { countKTA[d.detailKTA] = (countKTA[d.detailKTA] || 0) + 1; }
-      if (jenisLaporan === 'TTA' && d.detailTTA && d.detailTTA.trim() !== "") { if (!d.detailTTA.toLowerCase().includes("kondisi tidak aman")) { countTTA[d.detailTTA] = (countTTA[d.detailTTA] || 0) + 1; } }
+      // Penghitungan KTA (Dipisah berdasarkan Enter/Baris Baru)
+      if (jenisLaporan === 'KTA' && d.detailKTA && d.detailKTA.trim() !== "") { 
+        let ktaItems = d.detailKTA.split(/\r?\n/);
+        ktaItems.forEach(item => {
+          let cleanItem = item.trim();
+          if (cleanItem !== "") {
+            countKTA[cleanItem] = (countKTA[cleanItem] || 0) + 1;
+          }
+        });
+      }
+      
+      // Penghitungan TTA (Dipisah berdasarkan Enter/Baris Baru)
+      if (jenisLaporan === 'TTA' && d.detailTTA && d.detailTTA.trim() !== "") { 
+        let ttaItems = d.detailTTA.split(/\r?\n/);
+        ttaItems.forEach(item => {
+          let cleanItem = item.trim();
+          if (cleanItem !== "" && !cleanItem.toLowerCase().includes("kondisi tidak aman")) {
+            countTTA[cleanItem] = (countTTA[cleanItem] || 0) + 1;
+          }
+        });
+      }
 
       let risiko = d.kriteriaRisiko || 'Belum Dinilai'; countRisiko[risiko] = (countRisiko[risiko] || 0) + 1;
     });
