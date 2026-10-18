@@ -74,6 +74,7 @@
     .status-badge-img { position: absolute; top: 10px; right: 10px; padding: 5px 15px; border-radius: 20px; color: white; font-size: 0.75rem; font-weight: 600; box-shadow: 0 2px 5px rgba(0,0,0,0.3); z-index: 10;}
     .status-Open { background: var(--danger); }
     .status-Progress { background: var(--warning); color: #222;}
+    .status-Menunggu { background: #ff851b; }
     .status-Closed { background: var(--success); }
     
     .banding-badge { position: absolute; top: 45px; right: 10px; background: var(--warning); color: #000; padding: 4px 12px; border-radius: 20px; font-size: 0.7rem; font-weight: bold; box-shadow: 0 2px 5px rgba(0,0,0,0.3); z-index: 10; animation: blinker 1.5s linear infinite;}
@@ -187,7 +188,7 @@
     </div>
     <hr style="border:0; border-top:1px solid #eee; margin:15px 0;">
     <div class="filter-grid">
-      <select id="f-status" onchange="applyFilters()"><option value="All">Semua Status</option><option value="Open" selected>Open</option><option value="Progress">Progress</option><option value="Closed">Closed</option></select>
+      <select id="f-status" onchange="applyFilters()"><option value="All">Semua Status</option><option value="Open" selected>Open</option><option value="Progress">Progress</option><option value="Menunggu Approval">Menunggu Approval</option><option value="Closed">Closed</option></select>
       
       <select id="f-banding" onchange="applyFilters()">
         <option value="All">Semua Status Banding</option>
@@ -329,8 +330,12 @@
   // =========================================================================
   const API_URL = "https://script.google.com/macros/s/AKfycbyiUoZpxq5Z6b8ZAjxcywsMG8hcI40y60AjK2Qar-PsIJqKjcMQ16eUaPF7b1bDvYxW7w/exec";
 
+  // PIN admin disimpan HANYA di memori (hilang saat halaman ditutup/refresh) dan
+  // dikirim ke server pada setiap permintaan agar server dapat memverifikasi sendiri.
+  let hsePin = "";
+
   async function callApi(action, payloadData = {}) {
-    const payload = { action: action, ...payloadData };
+    const payload = { action: action, adminPin: hsePin, ...payloadData };
     const response = await fetch(API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -376,7 +381,13 @@
   
   function showToast(msg, type = 'success') { const t = document.getElementById('custom-toast'); let i = type === 'error' ? ' <i class="fa-solid fa-circle-xmark"></i> ' : type === 'warning' ? ' <i class="fa-solid fa-triangle-exclamation"></i> ' : ' <i class="fa-solid fa-circle-check"></i> '; t.className = 'toast show toast-' + type; t.innerHTML = i + ' ' + msg; setTimeout(() => { t.classList.remove('show'); }, 3000); }
   function showCustomConfirm(title, msg, cb) { document.getElementById('confirm-title').innerHTML = title; document.getElementById('confirm-message').innerHTML = msg; const yBtn = document.getElementById('confirm-yes-btn'); yBtn.className = (title.toLowerCase().includes('hapus') || title.toLowerCase().includes('peringatan')) ? "btn-action btn-danger" : "btn-action btn-primary"; yBtn.onclick = function() { closeModal('confirmModal'); cb(); }; openModal('confirmModal'); }
-  function escapeHTML(str) { if (!str) return ''; return String(str).replace(/&/g, '&').replace(/</g, '<').replace(/>/g, '>') .replace(/"/g, '"').replace(/'/g, '&#39;'); }
+  function escapeHTML(str) { if (!str) return ''; return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
+
+  // Status yang bisa dipilih di form closing; status lain (mis. "Menunggu Approval") dipetakan ke Progress
+  function setCloseStatus(status) {
+    const sel = document.getElementById('close-status');
+    sel.value = ['Open', 'Progress', 'Closed'].includes(status) ? status : 'Progress';
+  }
 
   window.addEventListener('popstate', () => { if (navigationHistory.length > 1) { let m = document.querySelectorAll('.modal[style*="display: block"]'); if (m.length > 0) m.forEach(x => x.style.display = "none"); else { navigationHistory.pop(); showPage(navigationHistory[navigationHistory.length - 1], false); } } });
   window.onload = () => { history.replaceState({page: 'list'}, ''); fetchDataFirstLoad(); initZoomAndPanListeners(); };
@@ -547,10 +558,11 @@
       
       let risikoText = d.kriteriaRisiko ? escapeHTML(d.kriteriaRisiko) : 'Belum Dinilai';
       let risikoBadge = `<span style="font-size: 0.65rem; background: #e2e8f0; color: #334155; padding: 3px 8px; border-radius: 12px; font-weight: 600; display: inline-block; margin-top: 5px;"><i class="fa-solid fa-gauge-high"></i> Tingkat Risiko: ${risikoText}</span>`;
+      let statusClass = String(d.status).split(' ')[0];
 
       return `<div class="card" onclick="openDetail('${d.id}')">
                 <div class="img-container">
-                  <div class="status-badge-img status-${d.status}">${d.status}</div>
+                  <div class="status-badge-img status-${statusClass}">${escapeHTML(d.status)}</div>
                   ${bandingBadge}
                   <img src="${d.foto || errImg}" loading="lazy" onerror="this.onerror=null; this.src='${errImg}'">
                 </div>
@@ -607,9 +619,14 @@
       bandingAlert = `<div class="report-box" style="border-left-color: ${bColor}; background: #f8f9fa;"><div class="info-label" style="color: ${bColor};"><i class="fa-solid fa-gavel"></i> HASIL BANDING ADMIN: ${selectedItem.bandingStatus.toUpperCase()}</div><div class="info-value" style="margin-top:10px; font-size: 0.85rem;">${badgeTipe}<b>Rincian Pengajuan Banding:</b> ${alasanTeks}</div></div>`; 
     }
 
+    // Info penolakan closing oleh pengawas pelapor (alur approval)
+    let rejectBox = (selectedItem.alasanReject && selectedItem.status !== 'Closed')
+      ? `<div class="report-box" style="border-left-color: var(--danger);"><div class="info-label" style="color: var(--danger);"><i class="fa-solid fa-rotate-left"></i> Closing ditolak pelapor (${selectedItem.jumlahReject || 1}x)</div><div class="info-value" style="margin-top:5px;">${escapeHTML(selectedItem.alasanReject)}</div></div>`
+      : '';
+
     let risikoText = selectedItem.kriteriaRisiko ? escapeHTML(selectedItem.kriteriaRisiko) : 'Belum Dinilai';
 
-    content.innerHTML = `<div class="detail-img-box" onclick="openModal('imageModal', '${selectedItem.foto || errImg}')"><div class="img-label">BEFORE / TEMUAN AWAL</div><div class="img-hint"><i class="fa-solid fa-magnifying-glass"></i> Zoom</div><img src="${selectedItem.foto || errImg}" onerror="this.onerror=null; this.src='${errImg}'"></div>${closingSection}${bandingAlert}
+    content.innerHTML = `<div class="detail-img-box" onclick="openModal('imageModal', '${selectedItem.foto || errImg}')"><div class="img-label">BEFORE / TEMUAN AWAL</div><div class="img-hint"><i class="fa-solid fa-magnifying-glass"></i> Zoom</div><img src="${selectedItem.foto || errImg}" onerror="this.onerror=null; this.src='${errImg}'"></div>${closingSection}${bandingAlert}${rejectBox}
     
     <div class="info-card" style="margin-top:20px;">
       <div class="info-item">
@@ -621,7 +638,12 @@
       <div class="info-item"><div class="info-label">Departemen / PIC Kontraktor</div><div class="info-value" style="font-weight:600; color:var(--primary); display:flex; align-items:center; gap:10px; justify-content: space-between;"><span>${escapeHTML(selectedItem.pic)}</span>${isHseMode ? `<button class="btn-action" style="background:#f0f2f5; color:#333; padding:5px 12px; font-size:0.75rem; border:1px solid #ccc; border-radius:6px;" onclick="openModal('editPicModal')"><i class="fa-solid fa-building-circle-gear"></i> Ubah PIC</button>` : ''}</div></div><hr style="border:0; border-top:1px solid #eee; margin:15px 0;"><div class="info-item"><div class="info-label">Detail Lokasi Temuan</div><div class="info-value">${escapeHTML(selectedItem.lokasi)}</div></div><div class="info-item"><div class="info-label">Area Kerja (Zone)</div><div class="info-value">${escapeHTML(selectedItem.areaKerja)}</div></div><div class="info-item"><div class="info-label">Waktu Kejadian / Temuan</div><div class="info-value">${escapeHTML(selectedItem.waktuTemuan)}</div></div><div class="report-box"><div class="info-label" style="color:var(--danger)">Bahaya yang dilaporkan</div><div class="info-value" style="margin-top:5px;">${escapeHTML(selectedItem.bahaya)}</div></div></div>`;
     
     const actionArea = document.getElementById('action-area'); 
-    actionArea.innerHTML = `<button class="btn-full btn-primary" onclick="openClosingForm()"><i class="fa-solid fa-pen-to-square"></i> UPDATE STATUS / CLOSING</button>`; 
+    const menungguApproval = selectedItem.status === 'Menunggu Approval';
+    if (menungguApproval && !isHseMode) {
+      actionArea.innerHTML = `<div class="report-box" style="border-left-color:#ff851b; background:#fff8f0; margin-top:0;"><div class="info-label" style="color:#c2410c;"><i class="fa-solid fa-hourglass-half"></i> MENUNGGU APPROVAL PENGAWAS PELAPOR</div><div class="info-value" style="margin-top:8px; font-size:0.85rem;">Closing sudah diajukan dan sedang ditinjau. Status menjadi Closed setelah disetujui.</div></div>`;
+    } else {
+      actionArea.innerHTML = `<button class="btn-full btn-primary" onclick="openClosingForm()"><i class="fa-solid fa-pen-to-square"></i> UPDATE STATUS / CLOSING</button>`; 
+    }
     if (isHseMode) { 
       actionArea.innerHTML += `<button class="btn-full btn-danger" style="margin-top:10px;" onclick="deleteHazardBtn()"><i class="fa-solid fa-trash"></i> HAPUS TEMUAN PERMANEN</button>`; 
     } else { 
@@ -629,7 +651,7 @@
         actionArea.innerHTML += `<button class="btn-full btn-warning" style="margin-top:10px;" onclick="openModal('bandingModal')"><i class="fa-solid fa-scale-unbalanced"></i> KLARIFIKASI / BANDING TEMUAN</button>`; 
       } 
     }
-    document.getElementById('close-status').value = selectedItem.status; navigateTo('detail');
+    setCloseStatus(selectedItem.status); navigateTo('detail');
   }
 
   function toggleBandingType() { document.getElementById('banding-target-container').style.display = (document.getElementById('banding-type').value === 'UBAH_PIC') ? 'block' : 'none'; }
@@ -668,7 +690,7 @@
   function closeModal(id) { document.getElementById(id).style.display = "none"; }
   function closeModalOutside(e) { if (e.target.classList.contains('modal')) closeModal(e.target.id); }
 
-  function toggleHseMode() { if (isHseMode) { isHseMode = false; document.getElementById('btn-hse-toggle').classList.remove('hse-active'); document.getElementById('btn-hse-toggle').innerHTML = '<i class="fa-solid fa-lock"></i> <span>Admin</span>'; showToast("Mode Admin dinonaktifkan", "warning"); if(navigationHistory[navigationHistory.length-1] === 'detail') openDetail(selectedItem.id); } else { document.getElementById('hse-pin-input').value = ""; openModal('authModal'); } }
+  function toggleHseMode() { if (isHseMode) { isHseMode = false; hsePin = ""; document.getElementById('btn-hse-toggle').classList.remove('hse-active'); document.getElementById('btn-hse-toggle').innerHTML = '<i class="fa-solid fa-lock"></i> <span>Admin</span>'; showToast("Mode Admin dinonaktifkan", "warning"); if(navigationHistory[navigationHistory.length-1] === 'detail') openDetail(selectedItem.id); } else { document.getElementById('hse-pin-input').value = ""; openModal('authModal'); } }
   
   function submitHsePin() { 
     const pin = document.getElementById('hse-pin-input').value; 
@@ -677,6 +699,7 @@
     callApi('verifyHsePin', { pin: pin }).then(res => { 
       toggleLoading(false); 
       if (res.data) { 
+        hsePin = pin; 
         isHseMode = true; closeModal('authModal'); document.getElementById('btn-hse-toggle').classList.add('hse-active'); document.getElementById('btn-hse-toggle').innerHTML = '<i class="fa-solid fa-unlock"></i> <span>Aktif</span>'; showToast("Otorisasi Admin Berhasil", "success"); if(navigationHistory[navigationHistory.length-1] === 'detail') openDetail(selectedItem.id); 
       } else showToast("PIN SALAH!", "error"); 
     }).catch(e => { toggleLoading(false); showToast(e.message, "error"); }); 
@@ -715,7 +738,7 @@
   }
 
   function openClosingForm() {
-    document.getElementById('file-input').value = ""; currentImageBase64 = null; document.getElementById('close-name').value = selectedItem.closingBy || ''; document.getElementById('close-status').value = selectedItem.status || 'Open';
+    document.getElementById('file-input').value = ""; currentImageBase64 = null; document.getElementById('close-name').value = selectedItem.closingBy || ''; setCloseStatus(selectedItem.status);
     if (selectedItem.isoClosingDate) { const d = new Date(selectedItem.isoClosingDate); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); document.getElementById('close-date').value = d.toISOString().slice(0, 16); } else { const now = new Date(); now.setMinutes(now.getMinutes() - now.getTimezoneOffset()); document.getElementById('close-date').value = now.toISOString().slice(0, 16); }
     const p = document.getElementById('preview-img'); const i = document.getElementById('cam-icon'); const t = document.getElementById('cam-text'); if (selectedItem.fotoClosing && selectedItem.fotoClosing !== "") { p.src = selectedItem.fotoClosing; p.style.display = 'block'; i.style.display = 'none'; t.style.display = 'none'; } else { p.src = ""; p.style.display = 'none'; i.style.display = 'block'; t.style.display = 'block'; }
     if(isHseMode) { document.getElementById('hse-alert').style.display = "block"; document.getElementById('foto-mandatory').style.display = "none"; } else { document.getElementById('hse-alert').style.display = "none"; document.getElementById('foto-mandatory').style.display = "inline"; } navigateTo('closing');
@@ -729,13 +752,13 @@
   }
 
   function updateCharts(dataArr) {
-    let countStatus = { Open: 0, Progress: 0, Closed: 0 }; 
+    let countStatus = { Open: 0, Progress: 0, Menunggu: 0, Closed: 0 }; 
     let countKat = { 'Kondisi Tidak Aman (KTA)': 0, 'Tindakan Tidak Aman (TTA)': 0 }; 
     let countArea = {}; let countPic = {}; 
     let countKTA = {}; let countTTA = {}; let countRisiko = {}; 
 
     dataArr.forEach(d => {
-      if(d.status === 'Open') countStatus.Open++; else if(d.status === 'Progress') countStatus.Progress++; else if(d.status === 'Closed') countStatus.Closed++;
+      if(d.status === 'Open') countStatus.Open++; else if(d.status === 'Progress') countStatus.Progress++; else if(d.status === 'Menunggu Approval') countStatus.Menunggu++; else if(d.status === 'Closed') countStatus.Closed++;
       
       let rawKat = d.kategori ? d.kategori.toUpperCase() : ''; let jenisLaporan = '';
 
@@ -771,7 +794,7 @@
       let risiko = d.kriteriaRisiko || 'Belum Dinilai'; countRisiko[risiko] = (countRisiko[risiko] || 0) + 1;
     });
     
-    buildChart(charts, 'status', 'statusChart', 'doughnut', ['Open', 'Progress', 'Closed'], [countStatus.Open, countStatus.Progress, countStatus.Closed], ['#dc3545', '#ffc107', '#28a745']);
+    buildChart(charts, 'status', 'statusChart', 'doughnut', ['Open', 'Progress', 'Menunggu Approval', 'Closed'], [countStatus.Open, countStatus.Progress, countStatus.Menunggu, countStatus.Closed], ['#dc3545', '#ffc107', '#ff851b', '#28a745']);
     buildChart(charts, 'kategori', 'kategoriChart', 'doughnut', ['KTA', 'TTA'], [countKat['Kondisi Tidak Aman (KTA)'], countKat['Tindakan Tidak Aman (TTA)']], ['#fd7e14', '#6f42c1']);
     
     let areaSorted = Object.keys(countArea).sort((a,b) => countArea[b] - countArea[a]).slice(0, 10); buildChart(charts, 'area', 'areaChart', 'bar', areaSorted, areaSorted.map(k => countArea[k]), '#20c997');
