@@ -51,6 +51,10 @@
     
     .dashboard-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; width: 100%; box-sizing: border-box; }
     .chart-container { position: relative; width: 100%; min-height: 260px; max-width: 100%; margin: 0 auto; }
+
+    /* CATATAN VALIDASI DATA DASHBOARD */
+    .integrity-note { background: #eef6ff; border-left: 5px solid var(--accent); border-radius: 10px; padding: 12px 15px; font-size: 0.8rem; line-height: 1.5; margin-bottom: 20px; color: #234; }
+    .integrity-note.warn { background: #fff8e1; border-left-color: var(--warning); }
   
     @media (max-width: 768px) {
       .filter-header-flex { flex-direction: column; align-items: flex-start; }
@@ -235,9 +239,16 @@
         </button>
       </div>
       <div class="filter-grid">
+        <div class="multiselect-container" id="db-f-rep-container">
+          <div class="select-box" onclick="toggleDropdown('db-f-rep-dropdown')">
+            <span id="db-f-rep-text" data-all="Semua Departemen Pelapor" data-unit="Departemen" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500;">Semua Departemen Pelapor</span>
+            <i class="fa-solid fa-chevron-down" style="color: #888; font-size: 0.8rem;"></i>
+          </div>
+          <div id="db-f-rep-dropdown" class="checkbox-dropdown"></div>
+        </div>
         <div class="multiselect-container" id="db-f-pic-container">
           <div class="select-box" onclick="toggleDropdown('db-f-pic-dropdown')">
-            <span id="db-f-pic-text" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500;">Semua PIC/Dept</span>
+            <span id="db-f-pic-text" data-all="Semua PIC/Perusahaan (Hazard)" data-unit="PIC" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500;">Semua PIC/Perusahaan (Hazard)</span>
             <i class="fa-solid fa-chevron-down" style="color: #888; font-size: 0.8rem;"></i>
           </div>
           <div id="db-f-pic-dropdown" class="checkbox-dropdown"></div>
@@ -246,6 +257,8 @@
         <select id="db-f-year" onchange="applyDashboardFilters()"><option value="All">Semua Tahun</option></select>
       </div>
     </div>
+
+    <div id="db-integrity" class="integrity-note" style="display:none;"></div>
     
     <div class="filter-title" style="color:var(--primary); font-weight:bold; margin-top: 10px; margin-bottom: 12px; font-size: 1rem;">
       <i class="fa-solid fa-layer-group"></i> Statistik Keseluruhan SAP
@@ -256,7 +269,7 @@
         <div class="chart-container"><canvas id="sapTotalChart"></canvas></div>
       </div>
       <div class="info-card">
-        <h3 class="chart-title">Distribusi SAP per Departemen</h3>
+        <h3 class="chart-title">Distribusi SAP per Departemen Pelapor</h3>
         <div class="chart-container"><canvas id="sapDeptChart"></canvas></div>
       </div>
     </div>
@@ -358,8 +371,81 @@
   
   const errImg = "data:image/svg+xml;charset=UTF-8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22400%22 height=%22300%22 viewBox=%220 0 400 300%22%3E%3Crect fill=%22%23222%22 width=%22400%22 height=%22300%22/%3E%3Ctext fill=%22%23fff%22 x=%2250%25%22 y=%2250%25%22 text-anchor=%22middle%22 font-family=%22sans-serif%22 font-size=%2216%22 dy=%22.3em%22%3EFOTO TIDAK TERSEDIA%3C/text%3E%3C/svg%3E";
 
-  const pieOptions = { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 10 } } }, datalabels: { color: '#fff', font: { weight: 'bold', size: 11 } } } };
-  const barOptions = { indexAxis: 'y', responsive: true, maintainAspectRatio: false, layout: { padding: { right: 30, left: 15 } }, plugins: { legend: { display: false }, datalabels: { anchor: 'end', align: 'end', color: '#003366', font: { weight: 'bold', size: 10 }, formatter: (v) => v > 0 ? v : '' } }, scales: { x: { display: false }, y: { ticks: { font: { size: 10 } } } } };
+  // ---------------------------------------------------------------------
+  // NORMALISASI DATA (agar penghitungan statistik konsisten & relevan)
+  // ---------------------------------------------------------------------
+  const INVALID_DEPT_LABEL = 'Data Departemen Tidak Valid (Cek Sumber Data)';
+  const EMPTY_DEPT_LABEL = 'Belum Ada Departemen';
+
+  function cleanText(v) { return String(v == null ? '' : v).replace(/\s+/g, ' ').trim(); }
+
+  // Kriteria risiko: seragamkan huruf besar, kosong => BELUM DINILAI
+  function normRisk(v) { const t = cleanText(v).toUpperCase(); return (t && t !== '-') ? t : 'BELUM DINILAI'; }
+  function riskRank(r) { const order = ['EXTREME', 'HIGH', 'MEDIUM', 'LOW', 'BELUM DINILAI']; const i = order.indexOf(r); return i === -1 ? 99 : i; }
+  // Warna sesuai makna risiko (HIGH merah, MEDIUM kuning, LOW hijau)
+  function riskColor(r) {
+    if (r === 'EXTREME') return '#7f1d1d';
+    if (r === 'HIGH' || r === 'TINGGI') return '#dc3545';
+    if (r === 'MEDIUM' || r === 'SEDANG') return '#ffc107';
+    if (r === 'LOW' || r === 'RENDAH') return '#28a745';
+    if (r === 'BELUM DINILAI') return '#94a3b8';
+    return '#17a2b8';
+  }
+
+  // Klasifikasi kategori hazard: KTA / TTA / LAIN
+  function classifyHazard(kat) {
+    const k = cleanText(kat).toUpperCase();
+    if (k.includes('TINDAKAN') || /\bTTA\b/.test(k)) return 'TTA';
+    if (k.includes('KONDISI') || /\bKTA\b/.test(k)) return 'KTA';
+    return 'LAIN';
+  }
+  // Klasifikasi status hazard
+  function classifyStatus(st) {
+    const s = cleanText(st).toLowerCase();
+    if (s === 'open') return 'Open';
+    if (s === 'progress') return 'Progress';
+    if (s.startsWith('menunggu')) return 'Menunggu';
+    if (s === 'closed') return 'Closed';
+    return 'Lain';
+  }
+  // Klasifikasi kategori SAP
+  function classifySap(kat) {
+    const k = cleanText(kat).toLowerCase();
+    if (k.includes('hazard')) return 'Hazard Report';
+    if (k.includes('inspeksi')) return 'Inspeksi';
+    if (k.includes('observasi')) return 'Observasi';
+    if (k.includes('safety')) return 'Safety Talk';
+    return 'Lain';
+  }
+  // Nama departemen yang jelas bukan departemen (potongan kalimat isian, dll)
+  function isValidDept(name) {
+    const n = cleanText(name);
+    if (!n) return false;
+    if (/^[a-z]/.test(n)) return false;                       // diawali huruf kecil => potongan kalimat
+    if (/\b(segera|perbaiki|melaporkan|laporkan|mohon|tolong|sudah|belum)\b/i.test(n)) return false;
+    if (n.length > 45) return false;
+    if (/^[\d\W]+$/.test(n)) return false;                   // hanya angka/simbol
+    return true;
+  }
+  // Penghitung yang menggabungkan label sama (tidak peka huruf besar/kecil)
+  function makeCounter() {
+    const m = new Map();
+    return {
+      add(label, extra) { const k = String(label).toLowerCase(); const e = m.get(k); if (e) e.n++; else m.set(k, { label: label, n: 1, extra: extra }); },
+      entries() { return Array.from(m.values()).sort((a, b) => b.n - a.n); }
+    };
+  }
+
+  const pieOptions = { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 10 } } }, datalabels: { color: '#fff', font: { weight: 'bold', size: 11 }, formatter: (v) => v > 0 ? v : '' } } };
+  const barOptions = {
+    indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+    layout: { padding: { right: 30, left: 15 } },
+    plugins: { legend: { display: false }, datalabels: { anchor: 'end', align: 'end', color: '#003366', font: { weight: 'bold', size: 10 }, formatter: (v) => v > 0 ? v : '' } },
+    scales: {
+      x: { display: false },
+      y: { ticks: { font: { size: 10 }, callback: function(value) { const l = String(this.getLabelForValue(value)); return l.length > 30 ? l.slice(0, 29) + '…' : l; } } }
+    }
+  };
 
   function buildChart(chartObj, key, canvasId, type, labels, data, colors) {
     const canvasEl = document.getElementById(canvasId);
@@ -376,7 +462,7 @@
   document.addEventListener('click', function(e) { if (!e.target.closest('.multiselect-container')) document.querySelectorAll('.checkbox-dropdown').forEach(d => d.style.display = 'none'); });
   function toggleAllCb(dId, sId, tId, cb) { const isChecked = document.getElementById(sId).checked; const cbs = document.querySelectorAll(`#${dId} input[type="checkbox"]:not([id="${sId}"])`); cbs.forEach(c => c.checked = isChecked); updateCbText(dId, cbs.length, tId); cb(); }
   function updateCbState(dId, sId, tId, cb) { const cbs = document.querySelectorAll(`#${dId} input[type="checkbox"]:not([id="${sId}"])`); const checkedCount = Array.from(cbs).filter(c => c.checked).length; document.getElementById(sId).checked = (checkedCount === cbs.length); updateCbText(dId, cbs.length, tId); cb(); }
-  function updateCbText(dId, tCount, tId) { const cCount = document.querySelectorAll(`#${dId} input[type="checkbox"]:not([id$="-all"]):checked`).length; const tEl = document.getElementById(tId); if (cCount === tCount || cCount === 0) tEl.textContent = "Semua PIC/Dept"; else tEl.textContent = `${cCount} PIC Dipilih`; }
+  function updateCbText(dId, tCount, tId) { const cCount = document.querySelectorAll(`#${dId} input[type="checkbox"]:not([id$="-all"]):checked`).length; const tEl = document.getElementById(tId); if (cCount === tCount || cCount === 0) tEl.textContent = tEl.dataset.all || "Semua PIC/Dept"; else tEl.textContent = `${cCount} ${tEl.dataset.unit || "PIC"} Dipilih`; }
   function getSelectedCbValues(dId) { return Array.from(document.querySelectorAll(`#${dId} input[type="checkbox"]:not([id$="-all"]):checked`)).map(c => c.value); }
   
   function showToast(msg, type = 'success') { const t = document.getElementById('custom-toast'); let i = type === 'error' ? ' <i class="fa-solid fa-circle-xmark"></i> ' : type === 'warning' ? ' <i class="fa-solid fa-triangle-exclamation"></i> ' : ' <i class="fa-solid fa-circle-check"></i> '; t.className = 'toast show toast-' + type; t.innerHTML = i + ' ' + msg; setTimeout(() => { t.classList.remove('show'); }, 3000); }
@@ -400,7 +486,7 @@
       localStorage.setItem('hazardDataCache', JSON.stringify(res.data)); 
       allData = res.data; 
       initFilterOptions(); applyFilters(); applyDashboardFilters(); toggleLoading(false); document.getElementById('sync-indicator').style.display = 'none'; startSilentPolling(); 
-      callApi('getStatistikSemuaSAP').then(res2 => { allSapData = res2.data; applyDashboardFilters(); }); 
+      callApi('getStatistikSemuaSAP').then(res2 => { allSapData = res2.data; initRepFilter(); applyDashboardFilters(); }); 
     }).catch(err => { toggleLoading(false); showToast("Gagal memuat data", "error"); });
   }
 
@@ -434,7 +520,7 @@
     allData.forEach(d => { 
       if (d.pic && d.pic !== "Belum Ada PIC") picSet.add(d.pic); 
       if (d.isoDate) { let yr = new Date(d.isoDate).getFullYear(); if (yr > 1900) yearSet.add(yr); }
-      if (d.kriteriaRisiko) risikoSet.add(d.kriteriaRisiko);
+      risikoSet.add(normRisk(d.kriteriaRisiko));
     });
     
     globalPicList = Array.from(picSet).sort((a, b) => { let aIsPT = a.toUpperCase().startsWith("PT."); let bIsPT = b.toUpperCase().startsWith("PT."); if (aIsPT && !bIsPT) return -1; if (!aIsPT && bIsPT) return 1; return a.localeCompare(b); });
@@ -454,7 +540,7 @@
     });
     
     document.getElementById('f-pic-dropdown').innerHTML = picHtml; document.getElementById('db-f-pic-dropdown').innerHTML = dbPicHtml;
-    updateCbState('f-pic-dropdown', 'f-pic-all', 'f-pic-text', ()=>{}); updateCbState('db-f-pic-dropdown', 'db-f-pic-all', 'db-f-pic-text', ()=>{});
+    updateCbState('f-pic-dropdown', 'f-pic-all', 'f-pic-text', ()=>{}); updateCbState('db-f-pic-dropdown', 'db-f-pic-all', 'db-f-pic-text', ()=>{}); initRepFilter();
     
     if(isSilent) return; 
     
@@ -466,8 +552,8 @@
     const fRisiko = document.getElementById('f-risiko');
     if (fRisiko) {
       let risikoHtml = '<option value="All">Semua Kriteria Risiko</option>';
-      Array.from(risikoSet).sort().forEach(r => { risikoHtml += `<option value="${r}">${r}</option>`; });
-      risikoHtml += '<option value="Belum Dinilai">Belum Dinilai</option>';
+      risikoSet.add('BELUM DINILAI');
+      Array.from(risikoSet).sort((a, b) => riskRank(a) - riskRank(b) || a.localeCompare(b)).forEach(r => { risikoHtml += `<option value="${escapeHTML(r)}">${escapeHTML(r === 'BELUM DINILAI' ? 'Belum Dinilai' : r)}</option>`; });
       fRisiko.innerHTML = risikoHtml;
     }
   }
@@ -486,7 +572,7 @@
     const parsedYear = sYear !== 'All' ? parseInt(sYear) : 'All';
 
     currentFilteredData = allData.filter(d => { 
-      let mStatus = (sStatus === 'all') || (d.status.toLowerCase() === sStatus); 
+      let mStatus = (sStatus === 'all') || (cleanText(d.status).toLowerCase() === sStatus); 
       let mPic = isAllPic || selectedPics.includes(d.pic); 
       let mMonth = true; 
       let mYear = true; 
@@ -498,8 +584,7 @@
         else { mBanding = (rawBanding === sBanding); }
       }
 
-      let rawRisiko = d.kriteriaRisiko || 'Belum Dinilai';
-      let mRisiko = (sRisiko === 'All') || (rawRisiko === sRisiko);
+      let mRisiko = (sRisiko === 'All') || (normRisk(d.kriteriaRisiko) === sRisiko);
       
       if (d.isoDate) { 
         const dDate = new Date(d.isoDate); 
@@ -515,34 +600,54 @@
     renderList(true); 
   }
 
+  // Filter "Departemen Pelapor" (semua kategori SAP) dan filter "PIC/Perusahaan" (khusus Hazard)
+  let globalRepList = [];
+  function initRepFilter() {
+    const map = new Map();
+    const add = (v) => { const n = cleanText(v); if (n && isValidDept(n) && !map.has(n.toLowerCase())) map.set(n.toLowerCase(), n); };
+    allData.forEach(d => add(d.deptPelapor));
+    (allSapData || []).forEach(d => add(d.departemen));
+    const newList = Array.from(map.values()).sort((x, y) => x.localeCompare(y));
+    const prevSel = getSelectedCbValues('db-f-rep-dropdown'); const prevAll = globalRepList;
+    const keepAll = prevAll.length === 0 || prevSel.length === 0 || prevSel.length === prevAll.length;
+    let html = `<label><input type="checkbox" id="db-f-rep-all" onchange="toggleAllCb('db-f-rep-dropdown', 'db-f-rep-all', 'db-f-rep-text', applyDashboardFilters)" checked> <b>Pilih Semua</b></label>`;
+    newList.forEach(r => {
+      const checked = (keepAll || prevSel.includes(r) || !prevAll.includes(r)) ? 'checked' : '';
+      html += `<label><input type="checkbox" value="${escapeHTML(r)}" onchange="updateCbState('db-f-rep-dropdown', 'db-f-rep-all', 'db-f-rep-text', applyDashboardFilters)" ${checked}> ${escapeHTML(r)}</label>`;
+    });
+    globalRepList = newList;
+    document.getElementById('db-f-rep-dropdown').innerHTML = html;
+    updateCbState('db-f-rep-dropdown', 'db-f-rep-all', 'db-f-rep-text', () => {});
+  }
+
   function applyDashboardFilters() {
-    const selectedPics = getSelectedCbValues('db-f-pic-dropdown'); 
-    const isAllPic = (selectedPics.length === globalPicList.length) || (selectedPics.length === 0); 
-    const sMonth = document.getElementById('db-f-month').value; 
+    const selectedPics = getSelectedCbValues('db-f-pic-dropdown');
+    const isAllPic = (selectedPics.length === globalPicList.length) || (selectedPics.length === 0);
+    const selectedReps = getSelectedCbValues('db-f-rep-dropdown');
+    const isAllRep = (selectedReps.length === globalRepList.length) || (selectedReps.length === 0);
+    const repSet = new Set(selectedReps.map(x => x.toLowerCase()));
+    const sMonth = document.getElementById('db-f-month').value;
     const sYear = document.getElementById('db-f-year').value;
-    
     const parsedMonth = sMonth !== 'All' ? parseInt(sMonth) : 'All';
     const parsedYear = sYear !== 'All' ? parseInt(sYear) : 'All';
 
-    const dbFiltered = allData.filter(d => { 
-      let mPic = isAllPic || selectedPics.includes(d.pic); 
-      let mMonth = true; 
-      let mYear = true; 
-      if (d.isoDate) { const dDate = new Date(d.isoDate); if (parsedMonth !== 'All') mMonth = (dDate.getMonth() === parsedMonth); if (parsedYear !== 'All') mYear = (dDate.getFullYear() === parsedYear); } else { if (parsedMonth !== 'All' || parsedYear !== 'All') return false; } 
-      return mPic && mMonth && mYear; 
-    }); 
+    const dateOk = (tgl) => {
+      if (!tgl) return parsedMonth === 'All' && parsedYear === 'All';
+      const dt = new Date(tgl);
+      if (parsedMonth !== 'All' && dt.getMonth() !== parsedMonth) return false;
+      if (parsedYear !== 'All' && dt.getFullYear() !== parsedYear) return false;
+      return true;
+    };
+    // Departemen pelapor berlaku untuk SEMUA kategori; departemen tidak valid hanya ikut saat filter = semua
+    const repOk = (name) => isAllRep || (isValidDept(name) && repSet.has(cleanText(name).toLowerCase()));
+
+    window.__picFilterActive = !isAllPic;
+    // PIC/Perusahaan penanggung jawab hanya relevan untuk Hazard
+    const dbFiltered = allData.filter(d => (isAllPic || selectedPics.includes(d.pic)) && repOk(d.deptPelapor) && dateOk(d.isoDate));
     updateCharts(dbFiltered);
-    
-    if (allSapData && allSapData.length > 0) { 
-      const sapFiltered = allSapData.filter(d => { 
-        let mMonth = true; let mYear = true; let dept = d.departemen || d.pic; let mPic = isAllPic || selectedPics.includes(dept); let tgl = d.tanggal || d.isoDate; 
-        if (tgl) { const dDate = new Date(tgl); if (parsedMonth !== 'All') mMonth = (dDate.getMonth() === parsedMonth); if (parsedYear !== 'All') mYear = (dDate.getFullYear() === parsedYear); } else { if (parsedMonth !== 'All' || parsedYear !== 'All') return false; } 
-        return mMonth && mYear && mPic; 
-      }); 
-      updateSapCharts(sapFiltered, dbFiltered); 
-    } else {
-      updateSapCharts([], dbFiltered);
-    }
+
+    const sapFiltered = (allSapData || []).filter(d => repOk(d.departemen) && dateOk(d.tanggal || d.isoDate));
+    updateSapCharts(sapFiltered, dbFiltered);
   }
 
   function renderList(reset = false) {
@@ -556,7 +661,7 @@
       let shortBahaya = escBahaya.substring(0, 80) + (escBahaya.length > 80 ? '...' : ''); 
       let bandingBadge = (d.bandingStatus === 'Pending') ? `<div class="banding-badge"><i class="fa-solid fa-triangle-exclamation"></i> BANDING</div>` : '';
       
-      let risikoText = d.kriteriaRisiko ? escapeHTML(d.kriteriaRisiko) : 'Belum Dinilai';
+      let risikoText = escapeHTML(normRisk(d.kriteriaRisiko));
       let risikoBadge = `<span style="font-size: 0.65rem; background: #e2e8f0; color: #334155; padding: 3px 8px; border-radius: 12px; font-weight: 600; display: inline-block; margin-top: 5px;"><i class="fa-solid fa-gauge-high"></i> Tingkat Risiko: ${risikoText}</span>`;
       let statusClass = String(d.status).split(' ')[0];
 
@@ -624,7 +729,7 @@
       ? `<div class="report-box" style="border-left-color: var(--danger);"><div class="info-label" style="color: var(--danger);"><i class="fa-solid fa-rotate-left"></i> Closing ditolak pelapor (${selectedItem.jumlahReject || 1}x)</div><div class="info-value" style="margin-top:5px;">${escapeHTML(selectedItem.alasanReject)}</div></div>`
       : '';
 
-    let risikoText = selectedItem.kriteriaRisiko ? escapeHTML(selectedItem.kriteriaRisiko) : 'Belum Dinilai';
+    let risikoText = escapeHTML(normRisk(selectedItem.kriteriaRisiko));
 
     content.innerHTML = `<div class="detail-img-box" onclick="openModal('imageModal', '${selectedItem.foto || errImg}')"><div class="img-label">BEFORE / TEMUAN AWAL</div><div class="img-hint"><i class="fa-solid fa-magnifying-glass"></i> Zoom</div><img src="${selectedItem.foto || errImg}" onerror="this.onerror=null; this.src='${errImg}'"></div>${closingSection}${bandingAlert}${rejectBox}
     
@@ -733,7 +838,7 @@
   function forceServerFetch(msg) {
     const sStatus = document.getElementById('f-status').value; const sPics = getSelectedCbValues('f-pic-dropdown'); const sMonth = document.getElementById('f-month').value; const sYear = document.getElementById('f-year').value;
     callApi('getHazardData').then(res => { 
-      localStorage.setItem('hazardDataCache', JSON.stringify(res.data)); allData = res.data; initFilterOptions(); document.getElementById('f-status').value = sStatus; if (sPics.length > 0 && sPics.length < globalPicList.length) { document.getElementById('f-pic-all').checked = false; document.querySelectorAll('#f-pic-dropdown input[type="checkbox"]:not([id$="-all"])').forEach(cb => { cb.checked = sPics.includes(cb.value); }); updateCbText('f-pic-dropdown', globalPicList.length, 'f-pic-text'); } document.getElementById('f-month').value = sMonth; if ([...document.getElementById('f-year').options].some(o => o.value === sYear)) document.getElementById('f-year').value = sYear; toggleLoading(false); showToast(msg, "success"); navigationHistory = ['list']; history.replaceState({page: 'list'}, ''); showPage('list'); applyFilters(); 
+      localStorage.setItem('hazardDataCache', JSON.stringify(res.data)); allData = res.data; initFilterOptions(); document.getElementById('f-status').value = sStatus; if (sPics.length > 0 && sPics.length < globalPicList.length) { document.getElementById('f-pic-all').checked = false; document.querySelectorAll('#f-pic-dropdown input[type="checkbox"]:not([id$="-all"])').forEach(cb => { cb.checked = sPics.includes(cb.value); }); updateCbText('f-pic-dropdown', globalPicList.length, 'f-pic-text'); } document.getElementById('f-month').value = sMonth; if ([...document.getElementById('f-year').options].some(o => o.value === sYear)) document.getElementById('f-year').value = sYear; toggleLoading(false); showToast(msg, "success"); navigationHistory = ['list']; history.replaceState({page: 'list'}, ''); showPage('list'); applyFilters(); applyDashboardFilters();
     }).catch(e => { toggleLoading(false); showToast(e.message, "error"); });
   }
 
@@ -751,67 +856,112 @@
     callApi('processClosing', { formData: payload }).then(res => { document.getElementById('file-input').value = ""; currentImageBase64 = null; document.getElementById('btn-submit').disabled = false; forceServerFetch(res.message); }).catch(err => { showToast(err.message, "error"); toggleLoading(false); document.getElementById('btn-submit').disabled = false; });
   }
 
+  // ---------------------------------------------------------------------
+  // GRAFIK RINCIAN HAZARD REPORT
+  // Semua grafik dihitung dari data yang sama sehingga totalnya selalu sama.
+  // ---------------------------------------------------------------------
   function updateCharts(dataArr) {
-    let countStatus = { Open: 0, Progress: 0, Menunggu: 0, Closed: 0 }; 
-    let countKat = { 'Kondisi Tidak Aman (KTA)': 0, 'Tindakan Tidak Aman (TTA)': 0 }; 
-    let countArea = {}; let countPic = {}; 
-    let countKTA = {}; let countTTA = {}; let countRisiko = {}; 
+    const total = dataArr.length;
+    let countStatus = { Open: 0, Progress: 0, Menunggu: 0, Closed: 0, Lain: 0 };
+    let countKat = { KTA: 0, TTA: 0, LAIN: 0 };
+    const areaC = makeCounter(); const picC = makeCounter(); const ktaC = makeCounter(); const ttaC = makeCounter(); const risikoC = makeCounter();
 
     dataArr.forEach(d => {
-      if(d.status === 'Open') countStatus.Open++; else if(d.status === 'Progress') countStatus.Progress++; else if(d.status === 'Menunggu Approval') countStatus.Menunggu++; else if(d.status === 'Closed') countStatus.Closed++;
-      
-      let rawKat = d.kategori ? d.kategori.toUpperCase() : ''; let jenisLaporan = '';
+      countStatus[classifyStatus(d.status)]++;
 
-      if(rawKat.includes('KTA') || rawKat.includes('KONDISI') || rawKat.includes('AMAN')) { 
-        if(rawKat.includes('TINDAKAN') || rawKat.includes('TTA')) { countKat['Tindakan Tidak Aman (TTA)']++; jenisLaporan = 'TTA'; } else { countKat['Kondisi Tidak Aman (KTA)']++; jenisLaporan = 'KTA'; } 
-      } else if (rawKat.includes('TTA') || rawKat.includes('TINDAKAN')) { countKat['Tindakan Tidak Aman (TTA)']++; jenisLaporan = 'TTA'; }
-      
-      let area = d.areaKerja || 'Lain-lain'; countArea[area] = (countArea[area] || 0) + 1; 
-      let pic = d.pic || 'Belum Ada PIC'; countPic[pic] = (countPic[pic] || 0) + 1; 
-      
-      // Penghitungan KTA (Dipisah berdasarkan Enter/Baris Baru)
-      if (jenisLaporan === 'KTA' && d.detailKTA && d.detailKTA.trim() !== "") { 
-        let ktaItems = d.detailKTA.split(/\r?\n/);
-        ktaItems.forEach(item => {
-          let cleanItem = item.trim();
-          if (cleanItem !== "") {
-            countKTA[cleanItem] = (countKTA[cleanItem] || 0) + 1;
-          }
-        });
-      }
-      
-      // Penghitungan TTA (Dipisah berdasarkan Enter/Baris Baru)
-      if (jenisLaporan === 'TTA' && d.detailTTA && d.detailTTA.trim() !== "") { 
-        let ttaItems = d.detailTTA.split(/\r?\n/);
-        ttaItems.forEach(item => {
-          let cleanItem = item.trim();
-          if (cleanItem !== "" && !cleanItem.toLowerCase().includes("kondisi tidak aman")) {
-            countTTA[cleanItem] = (countTTA[cleanItem] || 0) + 1;
-          }
-        });
-      }
+      const jenis = classifyHazard(d.kategori);
+      countKat[jenis]++;
 
-      let risiko = d.kriteriaRisiko || 'Belum Dinilai'; countRisiko[risiko] = (countRisiko[risiko] || 0) + 1;
+      areaC.add(cleanText(d.areaKerja).toUpperCase() || 'LAIN-LAIN');
+      picC.add(cleanText(d.pic) || 'Belum Ada PIC');
+      risikoC.add(normRisk(d.kriteriaRisiko));
+
+      // Detail KTA/TTA dipisah per baris, dibersihkan dari penomoran/bullet, label sama digabung
+      const splitItems = (txt) => String(txt || '').split(/\r?\n/).map(s => cleanText(s.replace(/^\s*(?:[-•*]|\d+[.)])\s*/, ''))).filter(s => s !== '');
+      if (jenis === 'KTA' && d.detailKTA) { splitItems(d.detailKTA).forEach(it => ktaC.add(it)); }
+      if (jenis === 'TTA' && d.detailTTA) { splitItems(d.detailTTA).forEach(it => { if (!it.toLowerCase().includes('kondisi tidak aman')) ttaC.add(it); }); }
     });
-    
-    buildChart(charts, 'status', 'statusChart', 'doughnut', ['Open', 'Progress', 'Menunggu Approval', 'Closed'], [countStatus.Open, countStatus.Progress, countStatus.Menunggu, countStatus.Closed], ['#dc3545', '#ffc107', '#ff851b', '#28a745']);
-    buildChart(charts, 'kategori', 'kategoriChart', 'doughnut', ['KTA', 'TTA'], [countKat['Kondisi Tidak Aman (KTA)'], countKat['Tindakan Tidak Aman (TTA)']], ['#fd7e14', '#6f42c1']);
-    
-    let areaSorted = Object.keys(countArea).sort((a,b) => countArea[b] - countArea[a]).slice(0, 10); buildChart(charts, 'area', 'areaChart', 'bar', areaSorted, areaSorted.map(k => countArea[k]), '#20c997');
-    let picSorted = Object.keys(countPic).sort((a,b) => countPic[b] - countPic[a]).slice(0, 15); buildChart(charts, 'pic', 'picChart', 'bar', picSorted, picSorted.map(k => countPic[k]), '#00a8cc');
-    let ktaSorted = Object.keys(countKTA).sort((a,b) => countKTA[b] - countKTA[a]).slice(0, 10); buildChart(charts, 'kta', 'ktaChart', 'bar', ktaSorted, ktaSorted.map(k => countKTA[k]), '#e83e8c');
-    let ttaSorted = Object.keys(countTTA).sort((a,b) => countTTA[b] - countTTA[a]).slice(0, 10); buildChart(charts, 'tta', 'ttaChart', 'bar', ttaSorted, ttaSorted.map(k => countTTA[k]), '#ff851b');
-    let risikoSorted = Object.keys(countRisiko).sort((a,b) => countRisiko[b] - countRisiko[a]); let dataRisiko = risikoSorted.map(k => countRisiko[k]); let warnaRisiko = ['#dc3545', '#ffc107', '#28a745', '#17a2b8', '#6f42c1']; buildChart(charts, 'risiko', 'sapRisikoChart', 'doughnut', risikoSorted, dataRisiko, warnaRisiko);
+
+    // Status
+    let stLabels = ['Open', 'Progress', 'Menunggu Approval', 'Closed']; let stData = [countStatus.Open, countStatus.Progress, countStatus.Menunggu, countStatus.Closed]; let stColors = ['#dc3545', '#ffc107', '#ff851b', '#28a745'];
+    if (countStatus.Lain > 0) { stLabels.push('Status Lainnya'); stData.push(countStatus.Lain); stColors.push('#94a3b8'); }
+    buildChart(charts, 'status', 'statusChart', 'doughnut', stLabels, stData, stColors);
+
+    // Kategori (KTA/TTA + yang tidak terklasifikasi agar total tetap sama)
+    let katLabels = ['KTA', 'TTA']; let katData = [countKat.KTA, countKat.TTA]; let katColors = ['#fd7e14', '#6f42c1'];
+    if (countKat.LAIN > 0) { katLabels.push('Kategori Lainnya'); katData.push(countKat.LAIN); katColors.push('#94a3b8'); }
+    buildChart(charts, 'kategori', 'kategoriChart', 'doughnut', katLabels, katData, katColors);
+
+    // Kriteria risiko: urut EXTREME > HIGH > MEDIUM > LOW > BELUM DINILAI, warna sesuai makna
+    const risikoSorted = risikoC.entries().sort((a, b) => riskRank(a.label) - riskRank(b.label) || b.n - a.n);
+    buildChart(charts, 'risiko', 'sapRisikoChart', 'doughnut', risikoSorted.map(e => e.label), risikoSorted.map(e => e.n), risikoSorted.map(e => riskColor(e.label)));
+
+    const top = (counter, n) => counter.entries().slice(0, n);
+    const aS = top(areaC, 10); buildChart(charts, 'area', 'areaChart', 'bar', aS.map(e => e.label), aS.map(e => e.n), '#20c997');
+    const pS = top(picC, 15); buildChart(charts, 'pic', 'picChart', 'bar', pS.map(e => e.label), pS.map(e => e.n), '#00a8cc');
+    const kS = top(ktaC, 10); buildChart(charts, 'kta', 'ktaChart', 'bar', kS.map(e => e.label), kS.map(e => e.n), '#e83e8c');
+    const tS = top(ttaC, 10); buildChart(charts, 'tta', 'ttaChart', 'bar', tS.map(e => e.label), tS.map(e => e.n), '#ff851b');
+
+    window.__hazardIntegrity = { total: total, katLain: countKat.LAIN, statusLain: countStatus.Lain, belumDinilai: (risikoC.entries().find(e => e.label === 'BELUM DINILAI') || { n: 0 }).n };
   }
 
+  // ---------------------------------------------------------------------
+  // GRAFIK STATISTIK SAP
+  // Hazard HANYA dihitung dari data hazard (hazardDataArr). Baris berkategori
+  // Hazard di data SAP diabaikan agar tidak terhitung dua kali.
+  // ---------------------------------------------------------------------
   function updateSapCharts(sapDataArr, hazardDataArr = []) {
-    let countKat = { 'Hazard Report': hazardDataArr.length, 'Inspeksi': 0, 'Observasi': 0, 'Safety Talk': 0 }; 
-    let countDept = {};
+    let countKat = { 'Hazard Report': hazardDataArr.length, 'Inspeksi': 0, 'Observasi': 0, 'Safety Talk': 0 };
+    const deptC = makeCounter();
+    let hazardRowsIgnored = 0; let kategoriLain = 0; let invalidDept = 0; let emptyDept = 0; const invalidDeptSamples = new Set();
 
-    sapDataArr.forEach(d => { if(countKat[d.kategori] !== undefined) countKat[d.kategori]++; let dept = d.departemen || 'Belum Ada PIC'; countDept[dept] = (countDept[dept] || 0) + 1; });
+    const addDept = (raw) => {
+      const r = cleanText(raw);
+      if (!r) { emptyDept++; deptC.add(EMPTY_DEPT_LABEL); }
+      else if (!isValidDept(r)) { invalidDept++; if (invalidDeptSamples.size < 5) invalidDeptSamples.add(r); deptC.add(INVALID_DEPT_LABEL); }
+      else { deptC.add(r); }
+    };
+
+    (sapDataArr || []).forEach(d => {
+      const k = classifySap(d.kategori);
+      if (k === 'Hazard Report') { hazardRowsIgnored++; return; }   // hazard hanya dari data hazard
+      if (k === 'Lain') { kategoriLain++; return; }
+      countKat[k]++;
+      addDept(d.departemen);
+    });
+    // Hazard dihitung per departemen PELAPOR, sama seperti Inspeksi/Observasi/Safety Talk
+    hazardDataArr.forEach(h => addDept(h.deptPelapor));
+
     buildChart(sapCharts, 'total', 'sapTotalChart', 'doughnut', ['Hazard', 'Inspeksi', 'Observasi', 'Safety Talk'], [countKat['Hazard Report'], countKat['Inspeksi'], countKat['Observasi'], countKat['Safety Talk']], ['#dc3545', '#00a8cc', '#6f42c1', '#28a745']);
-    
-    let deptSorted = Object.keys(countDept).sort((a,b) => countDept[b] - countDept[a]).slice(0, 10); buildChart(sapCharts, 'dept', 'sapDeptChart', 'bar', deptSorted, deptSorted.map(k => countDept[k]), '#003366');
+
+    const dS = deptC.entries().slice(0, 10);
+    const dColors = dS.map(e => e.label === INVALID_DEPT_LABEL ? '#dc3545' : (e.label === EMPTY_DEPT_LABEL ? '#94a3b8' : '#003366'));
+    buildChart(sapCharts, 'dept', 'sapDeptChart', 'bar', dS.map(e => e.label), dS.map(e => e.n), dColors);
+
+    renderIntegrityNote({
+      hazard: countKat['Hazard Report'], inspeksi: countKat['Inspeksi'], observasi: countKat['Observasi'], safety: countKat['Safety Talk'],
+      hazardRowsIgnored: hazardRowsIgnored, kategoriLain: kategoriLain, invalidDept: invalidDept, emptyDept: emptyDept, samples: Array.from(invalidDeptSamples),
+      sapLoaded: !!(allSapData && allSapData.length > 0)
+    });
+  }
+
+  // Catatan validasi di atas grafik agar angka mudah diaudit
+  function renderIntegrityNote(i) {
+    const el = document.getElementById('db-integrity'); if (!el) return;
+    const hz = window.__hazardIntegrity || { total: i.hazard, katLain: 0, statusLain: 0, belumDinilai: 0 };
+    const totalSap = i.hazard + i.inspeksi + i.observasi + i.safety;
+    let html = `<b><i class="fa-solid fa-circle-check"></i> Validasi data:</b> Total SAP <b>${totalSap}</b> = Hazard <b>${i.hazard}</b> + Inspeksi <b>${i.inspeksi}</b> + Observasi <b>${i.observasi}</b> + Safety Talk <b>${i.safety}</b>. Jumlah Hazard sama dengan total pada grafik Status, Kategori, dan Kriteria Risiko.`;
+    let warn = false;
+    if (window.__picFilterActive) { html += `<br>• Filter PIC/Perusahaan hanya berlaku untuk data Hazard; Inspeksi, Observasi, dan Safety Talk tidak ikut tersaring.`; }
+    if (i.emptyDept > 0) { warn = true; html += `<br>• ${i.emptyDept} data tidak memiliki departemen pelapor.`; }
+    if (!i.sapLoaded) { html += `<br><i class="fa-solid fa-spinner fa-spin"></i> Data Inspeksi/Observasi/Safety Talk masih dimuat...`; }
+    if (i.hazardRowsIgnored > 0) { html += `<br>• ${i.hazardRowsIgnored} baris Hazard di data SAP diabaikan karena sudah dihitung dari data Hazard (mencegah hitungan ganda).`; }
+    if (i.invalidDept > 0) { warn = true; html += `<br>• <b>${i.invalidDept}</b> data SAP memiliki nama departemen tidak valid${i.samples.length ? ' (contoh: ' + i.samples.map(s => '"' + escapeHTML(s) + '"').join(', ') + ')' : ''}. Ditampilkan sebagai batang merah; perbaiki sumbernya di spreadsheet / <code>getStatistikSemuaSAP</code>.`; }
+    if (i.kategoriLain > 0) { warn = true; html += `<br>• ${i.kategoriLain} data SAP berkategori tidak dikenali dan tidak dihitung.`; }
+    if (hz.katLain > 0) { warn = true; html += `<br>• ${hz.katLain} hazard berkategori selain KTA/TTA (ditampilkan sebagai "Kategori Lainnya").`; }
+    if (hz.statusLain > 0) { warn = true; html += `<br>• ${hz.statusLain} hazard berstatus tidak dikenali (ditampilkan sebagai "Status Lainnya").`; }
+    if (hz.belumDinilai > 0) { html += `<br>• ${hz.belumDinilai} hazard belum dinilai kriteria risikonya.`; }
+    el.className = 'integrity-note' + (warn ? ' warn' : ''); el.innerHTML = html; el.style.display = 'block';
   }
 
   function downloadFullDashboardResume() {
@@ -864,7 +1014,7 @@
   function exportToExcel() {
     toggleLoading(true);
     if (!currentFilteredData || currentFilteredData.length === 0) { toggleLoading(false); return showToast("Tidak ada data untuk di-download!", "warning"); }
-    let dataToExport = currentFilteredData.map((d, index) => ({ "No": index + 1, "ID": d.id, "Status": d.status, "Waktu Temuan": d.waktuTemuan, "Area Kerja": d.areaKerja, "Lokasi": d.lokasi, "Kategori": d.kategori, "Departemen/PIC": d.pic, "Deskripsi Bahaya": d.bahaya, "Status Banding": d.bandingStatus, "Alasan Banding": d.bandingAlasan, "Eksekutor Perbaikan": d.closingBy || "-", "Tanggal Selesai": d.tanggalClosing !== "-" ? d.tanggalClosing : "-", "Foto Awal": d.foto || "-", "Foto Perbaikan": d.fotoClosing || "-" }));
+    let dataToExport = currentFilteredData.map((d, index) => ({ "No": index + 1, "ID": d.id, "Status": d.status, "Waktu Temuan": d.waktuTemuan, "Area Kerja": d.areaKerja, "Lokasi": d.lokasi, "Kategori": d.kategori, "Kriteria Risiko": normRisk(d.kriteriaRisiko), "Departemen/PIC": d.pic, "Deskripsi Bahaya": d.bahaya, "Detail KTA": d.detailKTA || "-", "Detail TTA": d.detailTTA || "-", "Status Banding": d.bandingStatus, "Alasan Banding": d.bandingAlasan, "Eksekutor Perbaikan": d.closingBy || "-", "Tanggal Selesai": d.tanggalClosing !== "-" ? d.tanggalClosing : "-", "Foto Awal": d.foto || "-", "Foto Perbaikan": d.fotoClosing || "-" }));
     const worksheet = XLSX.utils.json_to_sheet(dataToExport); const workbook = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(workbook, worksheet, "Data");
     const dateStr = new Date().toISOString().slice(0,10).replace(/-/g, ""); const sPics = getSelectedCbValues('f-pic-dropdown'); const pName = (sPics.length === globalPicList.length || sPics.length === 0) ? 'Semua_PIC' : (sPics.length + '_PIC_Dipilih'); const fName = `Report_Hazard_${pName}_${dateStr}.xlsx`;
     const base64Data = XLSX.write(workbook, { bookType: 'xlsx', type: 'base64' });
