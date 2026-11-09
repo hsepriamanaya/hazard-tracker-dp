@@ -49,7 +49,14 @@
     .btn-action.btn-info { background: #00a8cc; }
     .btn-action:hover { opacity: 0.8; transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.15); }
     
-    .dashboard-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; width: 100%; box-sizing: border-box; }
+    .dashboard-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 20px; width: 100%; box-sizing: border-box; }
+    .dashboard-grid > .info-card { grid-column: span 12; margin-bottom: 0; }
+    .dashboard-grid > .c4 { grid-column: span 4; }
+    .dashboard-grid > .c6 { grid-column: span 6; }
+    .dashboard-grid > .c8 { grid-column: span 8; }
+    .dashboard-grid > .c12 { grid-column: span 12; }
+    .chart-title { font-size: 1rem; font-weight: 600; color: var(--primary); margin: 0 0 12px; line-height: 1.3; }
+    @media (max-width: 1100px) { .dashboard-grid > .c4 { grid-column: span 6; } .dashboard-grid > .c8 { grid-column: span 12; } }
     .chart-container { position: relative; width: 100%; min-height: 260px; max-width: 100%; margin: 0 auto; }
 
     /* CATATAN VALIDASI DATA DASHBOARD */
@@ -82,7 +89,7 @@
       .header { gap: 8px; padding: 10px 12px; }
       .header-title { font-size: 0.8rem; }
       .hse-toggle-btn { padding: 5px 10px; font-size: 0.68rem; gap: 4px; }
-      .dashboard-grid { grid-template-columns: 1fr; }
+      .dashboard-grid { grid-template-columns: 1fr; } .dashboard-grid > .info-card { grid-column: 1 / -1 !important; }
     }
   
     .content-wrapper { padding: 20px; max-width: 800px; margin: 0 auto; }
@@ -288,17 +295,17 @@
       <i class="fa-solid fa-layer-group"></i> Statistik Keseluruhan SAP
     </div>
     <div class="dashboard-grid" style="margin-bottom: 25px; border-bottom: 2px dashed #ddd; padding-bottom: 25px;">
-      <div class="info-card">
+      <div class="info-card c4">
         <h3 class="chart-title">Total Pelaksanaan SAP</h3>
         <div class="chart-container"><canvas id="sapTotalChart"></canvas></div>
       </div>
-      <div class="info-card">
+      <div class="info-card c8">
         <h3 class="chart-title">Distribusi SAP per Departemen Pelapor</h3>
         <div class="chart-container"><canvas id="sapDeptChart"></canvas></div>
       </div>
-      <div class="info-card full-width-card">
+      <div class="info-card c12">
         <h3 class="chart-title">Tren Bulanan Pelaksanaan SAP</h3>
-        <div class="chart-container" style="min-height:320px;"><canvas id="trendChart"></canvas></div>
+        <div class="chart-container" style="height:340px;"><canvas id="trendChart"></canvas></div>
       </div>
     </div>
     
@@ -306,36 +313,38 @@
       <i class="fa-solid fa-triangle-exclamation"></i> Rincian Hazard Report
     </div>
     <div class="dashboard-grid">
-      <div class="info-card"><h3 class="chart-title">Status Temuan</h3><div class="chart-container"><canvas id="statusChart"></canvas></div></div>
-      <div class="info-card"><h3 class="chart-title">Kategori Bahaya</h3><div class="chart-container"><canvas id="kategoriChart"></canvas></div></div>
-      <div class="info-card"><h3 class="chart-title">Kriteria Risiko (Hazard Report)</h3><div class="chart-container"><canvas id="sapRisikoChart"></canvas></div></div>
+      <div class="info-card c4"><h3 class="chart-title">Status Temuan</h3><div class="chart-container"><canvas id="statusChart"></canvas></div></div>
+      <div class="info-card c4"><h3 class="chart-title">Kategori Bahaya</h3><div class="chart-container"><canvas id="kategoriChart"></canvas></div></div>
+      <div class="info-card c4"><h3 class="chart-title">Kriteria Risiko (Hazard Report)</h3><div class="chart-container"><canvas id="sapRisikoChart"></canvas></div></div>
       
-      <div class="info-card">
-        <h3 class="chart-title">Top 10 Area Kerja</h3>
-        <div class="chart-container" style="min-height:350px;"><canvas id="areaChart"></canvas></div>
-      </div>
+      
 
-      <div class="info-card">
+      <div class="info-card c4">
         <h3 class="chart-title">Umur Temuan Belum Closed (Aging)</h3>
         <div class="chart-container"><canvas id="agingChart"></canvas></div>
       </div>
 
-      <div class="info-card">
+      <div class="info-card c8">
         <h3 class="chart-title">Top 10 PIC dengan Temuan Belum Closed</h3>
         <div class="chart-container" style="min-height:350px;"><canvas id="picOpenChart"></canvas></div>
       </div>
 
-      <div class="info-card full-width-card">
+      <div class="info-card c6">
+        <h3 class="chart-title">Top 10 Area Kerja</h3>
+        <div class="chart-container" style="min-height:350px;"><canvas id="areaChart"></canvas></div>
+      </div>
+
+      <div class="info-card c6">
         <h3 class="chart-title">Temuan per PIC/Dept</h3>
         <div class="chart-container" style="min-height:350px;"><canvas id="picChart"></canvas></div>
       </div>
       
-      <div class="info-card full-width-card">
+      <div class="info-card c6">
         <h3 class="chart-title">Top 10 Kondisi Tidak Aman (KTA)</h3>
         <div class="chart-container" style="min-height:350px;"><canvas id="ktaChart"></canvas></div>
       </div>
 
-      <div class="info-card full-width-card">
+      <div class="info-card c6">
         <h3 class="chart-title">Top 10 Tindakan Tidak Aman (TTA)</h3>
         <div class="chart-container" style="min-height:350px;"><canvas id="ttaChart"></canvas></div>
       </div>
@@ -486,26 +495,69 @@
     };
   }
 
-  const pieOptions = { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 10 } } }, datalabels: { color: '#fff', font: { weight: 'bold', size: 11 }, formatter: (v) => v > 0 ? v : '' } } };
-  const barOptions = {
-    indexAxis: 'y', responsive: true, maintainAspectRatio: false,
-    layout: { padding: { right: 30, left: 15 } },
-    plugins: { legend: { display: false }, datalabels: { anchor: 'end', align: 'end', color: '#003366', font: { weight: 'bold', size: 10 }, formatter: (v) => v > 0 ? v : '' } },
-    scales: {
-      x: { display: false },
-      y: { ticks: { font: { size: 10 }, callback: function(value) { const l = String(this.getLabelForValue(value)); return l.length > 30 ? l.slice(0, 29) + '…' : l; } } }
-    }
-  };
+  const pieOptions = { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } }, datalabels: { color: '#fff', font: { weight: 'bold', size: 12 }, formatter: (v) => v > 0 ? v : '' } } };
 
-  function buildChart(chartObj, key, canvasId, type, labels, data, colors) {
+  // Label panjang dipecah menjadi beberapa baris (maks. 3) agar tidak terpotong
+  function wrapLabel(text, maxChars, maxLines) {
+    const lines = []; let cur = '';
+    String(text).split(' ').forEach(w => {
+      if (w.length > maxChars) { if (cur) { lines.push(cur); cur = ''; } for (let i = 0; i < w.length; i += maxChars) lines.push(w.slice(i, i + maxChars)); return; }
+      if (cur && (cur + ' ' + w).length > maxChars) { lines.push(cur); cur = w; } else { cur = (cur + ' ' + w).trim(); }
+    });
+    if (cur) lines.push(cur);
+    if (lines.length > maxLines) { const cut = lines.slice(0, maxLines); cut[maxLines - 1] = cut[maxLines - 1].slice(0, Math.max(1, maxChars - 1)) + '…'; return cut; }
+    return lines;
+  }
+
+  function barOptionsFor(fullLabels) {
+    return {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false, layout: { padding: { right: 8, left: 2 } },
+      plugins: { legend: { display: false }, tooltip: { callbacks: { title: (it) => fullLabels[it[0].dataIndex] } },
+        datalabels: { anchor: 'end', align: 'end', color: '#003366', font: { weight: 'bold', size: 11 }, formatter: (v) => v > 0 ? v : '' } },
+      scales: { x: { display: false, beginAtZero: true, grace: '12%' }, y: { grid: { display: false }, ticks: { font: { size: 11 }, autoSkip: false } } }
+    };
+  }
+  function verticalBarOptions(fullLabels) {
+    return {
+      indexAxis: 'x', responsive: true, maintainAspectRatio: false, layout: { padding: { top: 22 } },
+      plugins: { legend: { display: false }, tooltip: { callbacks: { title: (it) => fullLabels[it[0].dataIndex] } },
+        datalabels: { anchor: 'end', align: 'end', color: '#003366', font: { weight: 'bold', size: 12 }, formatter: (v) => v > 0 ? v : '' } },
+      scales: { x: { grid: { display: false }, ticks: { font: { size: 11 } } }, y: { display: false, beginAtZero: true, grace: '10%' } }
+    };
+  }
+
+  // vertical = true untuk diagram batang tegak (mis. Aging)
+  function buildChart(chartObj, key, canvasId, type, labels, data, colors, vertical) {
     const canvasEl = document.getElementById(canvasId);
-    if (!canvasEl) return; 
+    if (!canvasEl) return;
     if (chartObj[key]) chartObj[key].destroy();
+    const box = canvasEl.parentElement;
+    let useLabels = labels; let options = pieOptions;
+    box.style.minHeight = '0';
+    if (type === 'bar') {
+      if (vertical) { options = verticalBarOptions(labels); box.style.height = '300px'; }
+      else {
+        const w = box.clientWidth || 440;   // lebar kartu menentukan panjang baris label
+        const maxChars = Math.max(14, Math.min(64, Math.floor(w * 0.38 / 5.8)));
+        useLabels = labels.map(l => wrapLabel(l, maxChars, 3));
+        options = barOptionsFor(labels);
+        const h = useLabels.reduce((acc, l) => acc + Math.max(1, l.length) * 14 + 14, 0) + 30;
+        box.style.height = Math.max(220, h) + 'px';
+      }
+    } else { box.style.height = '320px'; }
     chartObj[key] = new Chart(canvasEl, {
       type: type,
-      data: { labels: labels, datasets: [{ data: data, backgroundColor: colors, borderWidth: type === 'doughnut' ? 2 : 0, borderRadius: type === 'bar' ? 4 : 0 }] },
-      options: type === 'bar' ? barOptions : pieOptions
+      data: { labels: useLabels, datasets: [{ data: data, backgroundColor: colors, borderWidth: type === 'doughnut' ? 2 : 0, borderRadius: type === 'bar' ? 4 : 0, barPercentage: 0.8, categoryPercentage: 0.92, maxBarThickness: 30 }] },
+      options: options
     });
+  }
+
+  // Samakan tinggi dua kartu yang bersebelahan agar tidak ada ruang kosong
+  function syncHeights(a, b) {
+    const ea = document.getElementById(a), eb = document.getElementById(b); if (!ea || !eb) return;
+    const pa = ea.parentElement, pb = eb.parentElement;
+    const h = Math.max(parseInt(pa.style.height) || 0, parseInt(pb.style.height) || 0);
+    if (h > 0) { pa.style.height = h + 'px'; pb.style.height = h + 'px'; }
   }
 
   function toggleDropdown(id) { const el = document.getElementById(id); const isVisible = el.style.display === 'block'; document.querySelectorAll('.checkbox-dropdown').forEach(d => d.style.display = 'none'); el.style.display = isVisible ? 'none' : 'block'; }
@@ -958,6 +1010,7 @@
     const pS = top(picC, 15); buildChart(charts, 'pic', 'picChart', 'bar', pS.map(e => e.label), pS.map(e => e.n), '#00a8cc');
     const kS = top(ktaC, 10); buildChart(charts, 'kta', 'ktaChart', 'bar', kS.map(e => e.label), kS.map(e => e.n), '#e83e8c');
     const tS = top(ttaC, 10); buildChart(charts, 'tta', 'ttaChart', 'bar', tS.map(e => e.label), tS.map(e => e.n), '#ff851b');
+    syncHeights('areaChart', 'picChart'); syncHeights('ktaChart', 'ttaChart');
 
     window.__hazardIntegrity = { total: total, katLain: countKat.LAIN, statusLain: countStatus.Lain, belumDinilai: (risikoC.entries().find(e => e.label === 'BELUM DINILAI') || { n: 0 }).n };
   }
@@ -995,6 +1048,7 @@
     const dS = deptC.entries().slice(0, 10);
     const dColors = dS.map(e => e.label === INVALID_DEPT_LABEL ? '#dc3545' : (e.label === EMPTY_DEPT_LABEL ? '#94a3b8' : '#003366'));
     buildChart(sapCharts, 'dept', 'sapDeptChart', 'bar', dS.map(e => e.label), dS.map(e => e.n), dColors);
+    syncHeights('sapTotalChart', 'sapDeptChart');
 
     renderIntegrityNote({
       hazard: countKat['Hazard Report'], inspeksi: countKat['Inspeksi'], observasi: countKat['Observasi'], safety: countKat['Safety Talk'],
@@ -1066,7 +1120,7 @@
     const ages = openArr.filter(d => d.isoDate).map(d => ({ d: d, days: Math.floor((now - new Date(d.isoDate)) / 86400000) }));
     const buckets = [0, 0, 0, 0];
     ages.forEach(a => { if (a.days <= 7) buckets[0]++; else if (a.days <= 30) buckets[1]++; else if (a.days <= 90) buckets[2]++; else buckets[3]++; });
-    buildChart(charts, 'aging', 'agingChart', 'bar', ['0–7 hari', '8–30 hari', '31–90 hari', '> 90 hari'], buckets, ['#28a745', '#ffc107', '#ff851b', '#dc3545']);
+    buildChart(charts, 'aging', 'agingChart', 'bar', ['0–7 hari', '8–30 hari', '31–90 hari', '> 90 hari'], buckets, ['#28a745', '#ffc107', '#ff851b', '#dc3545'], true);
     const lama = ages.filter(a => a.days > TARGET.agingHari);
     const kritis = ages.filter(a => a.days > TARGET.agingKritisHari);
     const closeDur = closedArr.filter(d => d.isoDate && d.isoClosingDate).map(d => (new Date(d.isoClosingDate) - new Date(d.isoDate)) / 86400000).filter(x => x >= 0);
@@ -1075,6 +1129,7 @@
     const picOpenC = makeCounter(); openArr.forEach(d => picOpenC.add(cleanText(d.pic) || 'Belum Ada PIC'));
     const po = topN(picOpenC, 10);
     buildChart(charts, 'picOpen', 'picOpenChart', 'bar', po.map(e => e.label), po.map(e => e.n), '#ff851b');
+    syncHeights('agingChart', 'picOpenChart');
 
     const highOpen = openArr.filter(d => ['HIGH', 'EXTREME', 'TINGGI'].includes(normRisk(d.kriteriaRisiko)));
     const belumDinilai = hazArr.filter(d => normRisk(d.kriteriaRisiko) === 'BELUM DINILAI').length;
@@ -1202,10 +1257,10 @@
       let promises = Array.from(cards).map((card) => {
         return new Promise((resolve) => {
           let titleEl = card.querySelector('.chart-title'); let canvasEl = card.querySelector('canvas'); let titleText = titleEl ? titleEl.innerText.replace(/[↓]/g, '').trim() : 'Grafik Statistik';
-          let isBarChart = card.classList.contains('full-width-card') || (canvasEl && (canvasEl.id.includes('areaChart') || canvasEl.id.includes('picChart') || canvasEl.id.includes('ktaChart') || canvasEl.id.includes('ttaChart') || canvasEl.id.includes('sapDeptChart')));
+          let isBarChart = card.classList.contains('full-width-card') || (canvasEl && (canvasEl.id.includes('areaChart') || canvasEl.id.includes('picChart') || canvasEl.id.includes('ktaChart') || canvasEl.id.includes('ttaChart') || canvasEl.id.includes('sapDeptChart') || canvasEl.id.includes('picOpenChart') || canvasEl.id.includes('trendChart')));
           let cWidth = 2400; let cHeight = isBarChart ? 1600 : 1300; let subCanvas = document.createElement('canvas'); subCanvas.width = cWidth; subCanvas.height = cHeight; let subCtx = subCanvas.getContext('2d');
           subCtx.fillStyle = '#ffffff'; subCtx.fillRect(0, 0, cWidth, cHeight);
-          if (canvasEl) { if (isBarChart) { subCtx.drawImage(canvasEl, 220, 80, 2100, 1420); } else { subCtx.drawImage(canvasEl, 350, 100, 1700, 1100); } }
+          if (canvasEl) { const bx = isBarChart ? 120 : 350, by = isBarChart ? 60 : 100, bw = isBarChart ? 2160 : 1700, bh = isBarChart ? 1480 : 1100; const sc = Math.min(bw / canvasEl.width, bh / canvasEl.height); const dw = canvasEl.width * sc, dh = canvasEl.height * sc; subCtx.drawImage(canvasEl, bx + (bw - dw) / 2, by + (bh - dh) / 2, dw, dh); }
           let imgData = subCanvas.toDataURL('image/png', 1.0); resolve({ titleText, imgData, isBarChart });
         });
       });
@@ -1233,7 +1288,8 @@
 
   function navigateTo(p) { navigationHistory.push(p); history.pushState({page: p}, ''); showPage(p, false); }
   function goBack() { window.history.back(); }
-  function showPage(p) { document.querySelectorAll('.page').forEach(pg => pg.classList.remove('active')); document.getElementById('page-' + p).classList.add('active'); window.scrollTo(0,0); }
+  function showPage(p) { document.querySelectorAll('.page').forEach(pg => pg.classList.remove('active')); document.getElementById('page-' + p).classList.add('active'); window.scrollTo(0,0); if (p === 'dashboard') setTimeout(applyDashboardFilters, 50); }
+  let __rz; window.addEventListener('resize', () => { clearTimeout(__rz); __rz = setTimeout(() => { if (navigationHistory[navigationHistory.length - 1] === 'dashboard') applyDashboardFilters(); }, 350); });
   
   function previewImage(i) { if (i.files && i.files[0]) { const f = i.files[0]; const r = new FileReader(); r.onload = e => { const imgObj = new Image(); imgObj.src = e.target.result; imgObj.onload = () => { const MAX_WIDTH = 800; let w = imgObj.width; let h = imgObj.height; if (w > MAX_WIDTH) { h = Math.round((h * MAX_WIDTH) / w); w = MAX_WIDTH; } const c = document.createElement('canvas'); c.width = w; c.height = h; const ctx = c.getContext('2d'); ctx.drawImage(imgObj, 0, 0, w, h); currentImageBase64 = c.toDataURL('image/jpeg', 0.7); const img = document.getElementById('preview-img'); img.src = currentImageBase64; img.style.display = 'block'; document.getElementById('cam-icon').style.display = 'none'; document.getElementById('cam-text').style.display = 'none'; }; }; r.readAsDataURL(f); } }
 
