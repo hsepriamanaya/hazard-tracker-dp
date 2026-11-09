@@ -415,6 +415,18 @@
   const INVALID_DEPT_LABEL = 'Data Departemen Tidak Valid (Cek Sumber Data)';
   const EMPTY_DEPT_LABEL = 'Belum Ada Departemen';
 
+  // HSE adalah panitia Safety Accountability Program, bukan departemen yang wajib melapor.
+  // Departemen di bawah ini TIDAK ditampilkan sebagai "pelapor" (filter, grafik departemen, analisis partisipasi).
+  // PIC TIDAK terpengaruh: HSE tetap bisa muncul sebagai PIC penanggung jawab temuan.
+  const DEPT_PELAPOR_DIKECUALIKAN = ['HSE', 'HEALTH SAFETY'];
+  // false = laporan yang dibuat HSE tetap ikut dihitung pada total, hanya tidak tampil sebagai departemen pelapor.
+  // true  = laporan yang dibuat HSE dikeluarkan dari SELURUH statistik dashboard.
+  const HSE_DIKELUARKAN_DARI_TOTAL = false;
+  function isHsePelapor(name) {
+    const n = cleanText(name).toUpperCase(); if (!n) return false;
+    return DEPT_PELAPOR_DIKECUALIKAN.some(k => k === 'HSE' ? /(^|[^A-Z])HSE([^A-Z]|$)/.test(n) : n.includes(k));
+  }
+
   function cleanText(v) { return String(v == null ? '' : v).replace(/\s+/g, ' ').trim(); }
 
   // Kriteria risiko: seragamkan huruf besar, kosong => BELUM DINILAI
@@ -642,7 +654,7 @@
   let globalRepList = [];
   function initRepFilter() {
     const map = new Map();
-    const add = (v) => { const n = cleanText(v); if (n && isValidDept(n) && !map.has(n.toLowerCase())) map.set(n.toLowerCase(), n); };
+    const add = (v) => { const n = cleanText(v); if (n && isValidDept(n) && !isHsePelapor(n) && !map.has(n.toLowerCase())) map.set(n.toLowerCase(), n); };
     allData.forEach(d => add(d.deptPelapor));
     (allSapData || []).forEach(d => add(d.departemen));
     const newList = Array.from(map.values()).sort((x, y) => x.localeCompare(y));
@@ -677,7 +689,7 @@
       return true;
     };
     // Departemen pelapor berlaku untuk SEMUA kategori; departemen tidak valid hanya ikut saat filter = semua
-    const repOk = (name) => isAllRep || (isValidDept(name) && repSet.has(cleanText(name).toLowerCase()));
+    const repOk = (name) => { if (HSE_DIKELUARKAN_DARI_TOTAL && isHsePelapor(name)) return false; return isAllRep || (isValidDept(name) && repSet.has(cleanText(name).toLowerCase())); };
 
     window.__picFilterActive = !isAllPic;
     // PIC/Perusahaan penanggung jawab hanya relevan untuk Hazard
@@ -958,10 +970,11 @@
   function updateSapCharts(sapDataArr, hazardDataArr = []) {
     let countKat = { 'Hazard Report': hazardDataArr.length, 'Inspeksi': 0, 'Observasi': 0, 'Safety Talk': 0 };
     const deptC = makeCounter();
-    let hazardRowsIgnored = 0; let kategoriLain = 0; let invalidDept = 0; let emptyDept = 0; const invalidDeptSamples = new Set();
+    let hazardRowsIgnored = 0; let kategoriLain = 0; let invalidDept = 0; let emptyDept = 0; let hseReported = 0; const invalidDeptSamples = new Set();
 
     const addDept = (raw) => {
       const r = cleanText(raw);
+      if (isHsePelapor(r)) { hseReported++; return; }   // HSE = panitia, tidak ditampilkan sebagai departemen pelapor
       if (!r) { emptyDept++; deptC.add(EMPTY_DEPT_LABEL); }
       else if (!isValidDept(r)) { invalidDept++; if (invalidDeptSamples.size < 5) invalidDeptSamples.add(r); deptC.add(INVALID_DEPT_LABEL); }
       else { deptC.add(r); }
@@ -985,7 +998,7 @@
 
     renderIntegrityNote({
       hazard: countKat['Hazard Report'], inspeksi: countKat['Inspeksi'], observasi: countKat['Observasi'], safety: countKat['Safety Talk'],
-      hazardRowsIgnored: hazardRowsIgnored, kategoriLain: kategoriLain, invalidDept: invalidDept, emptyDept: emptyDept, samples: Array.from(invalidDeptSamples),
+      hazardRowsIgnored: hazardRowsIgnored, kategoriLain: kategoriLain, hseReported: hseReported, invalidDept: invalidDept, emptyDept: emptyDept, samples: Array.from(invalidDeptSamples),
       sapLoaded: !!(allSapData && allSapData.length > 0)
     });
   }
@@ -1103,7 +1116,7 @@
     const hzTiles = [['Total Hazard', total], ['Closing Rate', closingRate + '%'], ['Belum Closed', openArr.length], ['Rata² Closing', avgClose === null ? '-' : avgClose + ' hr'], ['High Risk Terbuka', highOpen.length]];
 
     // ===== 3) Analisis program SAP lain =====
-    const deptSetOf = (arr) => { const s = new Set(); arr.forEach(d => { const n = cleanText(d.departemen); if (n && isValidDept(n)) s.add(n.toLowerCase()); }); return s; };
+    const deptSetOf = (arr) => { const s = new Set(); arr.forEach(d => { const n = cleanText(d.departemen); if (n && isValidDept(n) && !isHsePelapor(n)) s.add(n.toLowerCase()); }); return s; };
     const progAnalysis = (prog, focusText) => {
       if (!sapLoaded) return { tiles: [['Total', '…']], items: [{ lv: 'info', t: 'Data masih dimuat...', s: '' }] };
       const arr = sapArr.filter(d => classifySap(d.kategori) === prog);
@@ -1116,9 +1129,10 @@
         else if (tr.ch >= TARGET.turunPct) items.push({ lv: 'ok', t: `${prog} bulan ${tr.ll} naik ${tr.ch}% dibanding ${tr.pl} (${tr.last} vs ${tr.prev}).`, s: '' });
         else items.push({ lv: 'ok', t: `${prog} relatif stabil: ${tr.last} pada ${tr.ll} vs ${tr.prev} pada ${tr.pl}.`, s: '' });
       }
-      const dC = makeCounter(); arr.forEach(d => { const n = cleanText(d.departemen); if (n && isValidDept(n)) dC.add(n); });
+      const dC = makeCounter(); arr.forEach(d => { const n = cleanText(d.departemen); if (n && isValidDept(n) && !isHsePelapor(n)) dC.add(n); });
       const dTop = topN(dC, 3);
-      if (dTop.length && arr.length >= 10 && pct(dTop[0].n, arr.length) >= TARGET.dominasiPct) items.push({ lv: 'med', t: `${prog} didominasi ${dTop[0].label} (${pct(dTop[0].n, arr.length)}% dari ${arr.length}).`, s: 'Distribusi belum merata; tetapkan target minimal per departemen agar partisipasi lebih luas.' });
+      const nNH = arr.filter(d => !isHsePelapor(d.departemen)).length;   // tanpa laporan HSE
+      if (dTop.length && nNH >= 10 && pct(dTop[0].n, nNH) >= TARGET.dominasiPct) items.push({ lv: 'med', t: `${prog} didominasi ${dTop[0].label} (${pct(dTop[0].n, nNH)}% dari ${nNH}).`, s: 'Distribusi belum merata; tetapkan target minimal per departemen agar partisipasi lebih luas.' });
       if (isAllRep && globalRepList.length) {
         const have = deptSetOf(arr); const absent = globalRepList.filter(r => !have.has(r.toLowerCase()));
         if (absent.length > 0) items.push({ lv: 'med', t: `${absent.length} dari ${globalRepList.length} departemen belum tercatat melaksanakan ${prog}: ${absent.slice(0, 6).join(', ')}${absent.length > 6 ? ', dll.' : ''}.`, s: 'Pastikan apakah departemen tersebut memang wajib berpartisipasi; jika ya, ingatkan PIC departemen dan tetapkan target bulanan.' });
@@ -1165,6 +1179,7 @@
     let html = `<b><i class="fa-solid fa-circle-check"></i> Validasi data:</b> Total SAP <b>${totalSap}</b> = Hazard <b>${i.hazard}</b> + Inspeksi <b>${i.inspeksi}</b> + Observasi <b>${i.observasi}</b> + Safety Talk <b>${i.safety}</b>. Jumlah Hazard sama dengan total pada grafik Status, Kategori, dan Kriteria Risiko.`;
     let warn = false;
     if (window.__picFilterActive) { html += `<br>• Filter PIC/Perusahaan hanya berlaku untuk data Hazard; Inspeksi, Observasi, dan Safety Talk tidak ikut tersaring.`; }
+    if (i.hseReported > 0) { html += `<br>• ${i.hseReported} data dilaporkan oleh HSE (panitia SAP) tidak ditampilkan sebagai departemen pelapor pada grafik departemen dan analisis partisipasi${HSE_DIKELUARKAN_DARI_TOTAL ? '' : ', namun tetap dihitung pada total'}.`; }
     if (i.emptyDept > 0) { warn = true; html += `<br>• ${i.emptyDept} data tidak memiliki departemen pelapor.`; }
     if (!i.sapLoaded) { html += `<br><i class="fa-solid fa-spinner fa-spin"></i> Data Inspeksi/Observasi/Safety Talk masih dimuat...`; }
     if (i.hazardRowsIgnored > 0) { html += `<br>• ${i.hazardRowsIgnored} baris Hazard di data SAP diabaikan karena sudah dihitung dari data Hazard (mencegah hitungan ganda).`; }
