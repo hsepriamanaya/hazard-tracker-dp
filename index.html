@@ -56,6 +56,25 @@
     .integrity-note { background: #eef6ff; border-left: 5px solid var(--accent); border-radius: 10px; padding: 12px 15px; font-size: 0.8rem; line-height: 1.5; margin-bottom: 20px; color: #234; }
     .integrity-note.warn { background: #fff8e1; border-left-color: var(--warning); }
   
+    /* ANALISIS & REKOMENDASI */
+    .ana-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; margin-bottom: 25px; }
+    .ana-card { background: white; border-radius: 15px; padding: 18px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
+    .ana-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 8px; margin: 12px 0; }
+    .ana-tile { background: #f5f7fa; border-radius: 10px; padding: 8px; text-align: center; }
+    .ana-tile b { display: block; font-size: 1.1rem; color: var(--primary); }
+    .ana-tile span { font-size: 0.65rem; color: #777; }
+    .ana-item { border-left: 4px solid #ccc; padding: 8px 10px; margin-top: 8px; font-size: 0.8rem; line-height: 1.5; background: #fafafa; border-radius: 0 8px 8px 0; }
+    .ana-item b { font-weight: 600; }
+    .ana-saran { display: block; margin-top: 3px; color: #333; font-weight: 400; }
+    .ana-saran i { color: #d4a000; }
+    .lv-high { border-left-color: var(--danger); background: #fff5f5; }
+    .lv-med { border-left-color: var(--warning); background: #fffdf2; }
+    .lv-ok { border-left-color: var(--success); background: #f3fbf5; }
+    .lv-info { border-left-color: var(--accent); background: #f0fafd; }
+    .ana-prio { background: #fff5f5; border-left: 5px solid var(--danger); border-radius: 10px; padding: 12px 15px; margin-bottom: 20px; font-size: 0.85rem; }
+    .ana-prio ul { margin: 8px 0 0; padding-left: 20px; line-height: 1.6; }
+    .ana-prio.ok { background: #f3fbf5; border-left-color: var(--success); }
+
     @media (max-width: 768px) {
       .filter-header-flex { flex-direction: column; align-items: flex-start; }
       .filter-actions { width: 100%; }
@@ -259,6 +278,11 @@
     </div>
 
     <div id="db-integrity" class="integrity-note" style="display:none;"></div>
+
+    <div class="filter-title" style="color:var(--primary); font-weight:bold; margin-top: 10px; margin-bottom: 12px; font-size: 1rem;">
+      <i class="fa-solid fa-lightbulb"></i> Analisis Mendalam & Rekomendasi
+    </div>
+    <div id="db-analysis"></div>
     
     <div class="filter-title" style="color:var(--primary); font-weight:bold; margin-top: 10px; margin-bottom: 12px; font-size: 1rem;">
       <i class="fa-solid fa-layer-group"></i> Statistik Keseluruhan SAP
@@ -271,6 +295,10 @@
       <div class="info-card">
         <h3 class="chart-title">Distribusi SAP per Departemen Pelapor</h3>
         <div class="chart-container"><canvas id="sapDeptChart"></canvas></div>
+      </div>
+      <div class="info-card full-width-card">
+        <h3 class="chart-title">Tren Bulanan Pelaksanaan SAP</h3>
+        <div class="chart-container" style="min-height:320px;"><canvas id="trendChart"></canvas></div>
       </div>
     </div>
     
@@ -285,6 +313,16 @@
       <div class="info-card">
         <h3 class="chart-title">Top 10 Area Kerja</h3>
         <div class="chart-container" style="min-height:350px;"><canvas id="areaChart"></canvas></div>
+      </div>
+
+      <div class="info-card">
+        <h3 class="chart-title">Umur Temuan Belum Closed (Aging)</h3>
+        <div class="chart-container"><canvas id="agingChart"></canvas></div>
+      </div>
+
+      <div class="info-card">
+        <h3 class="chart-title">Top 10 PIC dengan Temuan Belum Closed</h3>
+        <div class="chart-container" style="min-height:350px;"><canvas id="picOpenChart"></canvas></div>
       </div>
 
       <div class="info-card full-width-card">
@@ -648,6 +686,13 @@
 
     const sapFiltered = (allSapData || []).filter(d => repOk(d.departemen) && dateOk(d.tanggal || d.isoDate));
     updateSapCharts(sapFiltered, dbFiltered);
+
+    // Data untuk tren bulanan: mengabaikan filter bulan agar perkembangan antar bulan tetap terlihat
+    const noMonthOk = (tgl) => { if (!tgl) return false; const dt = new Date(tgl); return parsedYear === 'All' || dt.getFullYear() === parsedYear; };
+    const hazTrend = allData.filter(d => (isAllPic || selectedPics.includes(d.pic)) && repOk(d.deptPelapor) && noMonthOk(d.isoDate));
+    const sapTrend = (allSapData || []).filter(d => repOk(d.departemen) && noMonthOk(d.tanggal || d.isoDate));
+    window.__isAllRep = isAllRep;
+    renderAnalysis(sapFiltered, dbFiltered, sapTrend, hazTrend);
   }
 
   function renderList(reset = false) {
@@ -943,6 +988,173 @@
       hazardRowsIgnored: hazardRowsIgnored, kategoriLain: kategoriLain, invalidDept: invalidDept, emptyDept: emptyDept, samples: Array.from(invalidDeptSamples),
       sapLoaded: !!(allSapData && allSapData.length > 0)
     });
+  }
+
+  // ---------------------------------------------------------------------
+  // ANALISIS MENDALAM & REKOMENDASI
+  // Dibuat otomatis dari data yang sedang difilter. Angka di TARGET adalah ACUAN UMUM;
+  // sesuaikan dengan target resmi HSE perusahaan.
+  // ---------------------------------------------------------------------
+  const TARGET = { closingRatePct: 80, agingHari: 30, agingKritisHari: 90, closingHari: 14, minTtaPct: 10, dominasiPct: 50, areaDominanPct: 25, turunPct: 20 };
+  const BULAN_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+  const monthKey = (dt) => dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0');
+  const pct = (a, b) => b > 0 ? Math.round(a / b * 1000) / 10 : 0;
+  const topN = (counter, n) => counter.entries().slice(0, n);
+  const joinTop = (arr) => arr.map(e => `${e.label} (${e.n})`).join(', ');
+  const splitDetail = (txt) => String(txt || '').split(/\r?\n/).map(s => cleanText(s.replace(/^\s*(?:[-•*]|\d+[.)])\s*/, ''))).filter(s => s !== '');
+
+  function buildLineChart(key, canvasId, labels, datasets) {
+    const canvasEl = document.getElementById(canvasId); if (!canvasEl) return;
+    if (sapCharts[key]) sapCharts[key].destroy();
+    sapCharts[key] = new Chart(canvasEl, {
+      type: 'line', data: { labels: labels, datasets: datasets },
+      options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 10 } } }, datalabels: { display: false } },
+        scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
+    });
+  }
+
+  function renderAnalysis(sapArr, hazArr, sapTrend, hazTrend) {
+    const el = document.getElementById('db-analysis'); if (!el) return;
+    const now = new Date();
+    const yearSel = document.getElementById('db-f-year').value;
+    const sapLoaded = !!(allSapData && allSapData.length > 0);
+    const isAllRep = window.__isAllRep !== false;
+
+    // ===== 1) Tren bulanan semua program (abaikan filter bulan agar tren terlihat) =====
+    let keys = [];
+    if (yearSel !== 'All') { for (let m = 0; m < 12; m++) keys.push(yearSel + '-' + String(m + 1).padStart(2, '0')); }
+    else { for (let k = 11; k >= 0; k--) keys.push(monthKey(new Date(now.getFullYear(), now.getMonth() - k, 1))); }
+    const labelsBulan = keys.map(k => { const p = k.split('-'); return BULAN_SHORT[parseInt(p[1]) - 1] + ' ' + p[0].slice(2); });
+    const PROGS = ['Hazard Report', 'Inspeksi', 'Observasi', 'Safety Talk'];
+    const PCOLOR = { 'Hazard Report': '#dc3545', 'Inspeksi': '#00a8cc', 'Observasi': '#6f42c1', 'Safety Talk': '#28a745' };
+    const series = {}; PROGS.forEach(p => series[p] = Array(keys.length).fill(0));
+    const idx = {}; keys.forEach((k, i) => idx[k] = i);
+    const bump = (prog, tgl) => { if (!tgl) return; const dt = new Date(tgl); if (isNaN(dt)) return; const i = idx[monthKey(dt)]; if (i !== undefined) series[prog][i]++; };
+    hazTrend.forEach(d => bump('Hazard Report', d.isoDate));
+    sapTrend.forEach(d => { const k = classifySap(d.kategori); if (k !== 'Lain' && k !== 'Hazard Report') bump(k, d.tanggal || d.isoDate); });
+    buildLineChart('trend', 'trendChart', labelsBulan, PROGS.map(p => ({ label: p, data: series[p], borderColor: PCOLOR[p], backgroundColor: PCOLOR[p], tension: 0.3, pointRadius: 3, borderWidth: 2 })));
+
+    // Bandingkan dua bulan terakhir yang sudah selesai (bulan berjalan tidak dipakai agar tidak dianggap turun)
+    const nowKey = monthKey(now);
+    const valid = keys.map((k, i) => i).filter(i => keys[i] < nowKey);
+    const trendInfo = (prog) => {
+      if (valid.length < 2) return null;
+      const l = valid[valid.length - 1], p = valid[valid.length - 2];
+      const last = series[prog][l], prev = series[prog][p];
+      return { last: last, prev: prev, ll: labelsBulan[l], pl: labelsBulan[p], ch: prev > 0 ? Math.round((last - prev) / prev * 100) : null };
+    };
+
+    // ===== 2) Analisis Hazard =====
+    const total = hazArr.length;
+    const closedArr = hazArr.filter(d => classifyStatus(d.status) === 'Closed');
+    const openArr = hazArr.filter(d => classifyStatus(d.status) !== 'Closed');
+    const closingRate = pct(closedArr.length, total);
+    const ages = openArr.filter(d => d.isoDate).map(d => ({ d: d, days: Math.floor((now - new Date(d.isoDate)) / 86400000) }));
+    const buckets = [0, 0, 0, 0];
+    ages.forEach(a => { if (a.days <= 7) buckets[0]++; else if (a.days <= 30) buckets[1]++; else if (a.days <= 90) buckets[2]++; else buckets[3]++; });
+    buildChart(charts, 'aging', 'agingChart', 'bar', ['0–7 hari', '8–30 hari', '31–90 hari', '> 90 hari'], buckets, ['#28a745', '#ffc107', '#ff851b', '#dc3545']);
+    const lama = ages.filter(a => a.days > TARGET.agingHari);
+    const kritis = ages.filter(a => a.days > TARGET.agingKritisHari);
+    const closeDur = closedArr.filter(d => d.isoDate && d.isoClosingDate).map(d => (new Date(d.isoClosingDate) - new Date(d.isoDate)) / 86400000).filter(x => x >= 0);
+    const avgClose = closeDur.length ? Math.round(closeDur.reduce((a, b) => a + b, 0) / closeDur.length * 10) / 10 : null;
+
+    const picOpenC = makeCounter(); openArr.forEach(d => picOpenC.add(cleanText(d.pic) || 'Belum Ada PIC'));
+    const po = topN(picOpenC, 10);
+    buildChart(charts, 'picOpen', 'picOpenChart', 'bar', po.map(e => e.label), po.map(e => e.n), '#ff851b');
+
+    const highOpen = openArr.filter(d => ['HIGH', 'EXTREME', 'TINGGI'].includes(normRisk(d.kriteriaRisiko)));
+    const belumDinilai = hazArr.filter(d => normRisk(d.kriteriaRisiko) === 'BELUM DINILAI').length;
+    const rejectN = hazArr.filter(d => (d.jumlahReject || 0) > 0).length;
+    const bandingPending = hazArr.filter(d => d.bandingStatus === 'Pending').length;
+    const ktaN = hazArr.filter(d => classifyHazard(d.kategori) === 'KTA').length;
+    const ttaN = hazArr.filter(d => classifyHazard(d.kategori) === 'TTA').length;
+    const ttaShare = pct(ttaN, total);
+    const areaC = makeCounter(); const ktaC = makeCounter(); const ttaC = makeCounter();
+    hazArr.forEach(d => {
+      areaC.add(cleanText(d.areaKerja).toUpperCase() || 'LAIN-LAIN');
+      const j = classifyHazard(d.kategori);
+      if (j === 'KTA') splitDetail(d.detailKTA).forEach(x => ktaC.add(x));
+      if (j === 'TTA') splitDetail(d.detailTTA).forEach(x => { if (!x.toLowerCase().includes('kondisi tidak aman')) ttaC.add(x); });
+    });
+    const topAreas = topN(areaC, 3).filter(a => a.label !== 'LAIN-LAIN' && a.label !== 'LAINNYA');
+    const topKta = topN(ktaC, 3); const topTta = topN(ttaC, 3);
+
+    const hz = [];
+    if (total === 0) { hz.push({ lv: 'info', t: 'Tidak ada data hazard pada filter ini.', s: '' }); }
+    else {
+      const lvClose = closingRate >= TARGET.closingRatePct ? 'ok' : (closingRate >= TARGET.closingRatePct - 20 ? 'med' : 'high');
+      hz.push({ lv: lvClose, t: `Closing rate ${closingRate}% (${closedArr.length} dari ${total}); acuan ${TARGET.closingRatePct}%. ${openArr.length} temuan belum closed, ${lama.length} di antaranya lebih dari ${TARGET.agingHari} hari.`,
+        s: lvClose === 'ok' ? '' : `Adakan review mingguan temuan terbuka bersama PIC. PIC dengan temuan terbuka terbanyak: ${joinTop(topN(picOpenC, 3))}.` });
+      if (kritis.length > 0) hz.push({ lv: 'high', t: `${kritis.length} temuan belum closed lebih dari ${TARGET.agingKritisHari} hari.`, s: 'Eskalasi ke pimpinan departemen/manajemen PIC terkait dengan tenggat tertulis; bila perbaikan permanen butuh waktu lama, pasang pengendalian sementara (barikade, rambu, pembatasan akses).' });
+      if (highOpen.length > 0) hz.push({ lv: 'high', t: `${highOpen.length} temuan berisiko HIGH/EXTREME belum closed.`, s: 'Prioritaskan lebih dulu dengan batas waktu lebih singkat dibanding risiko lain dan pantau terpisah di review mingguan.' });
+      if (avgClose !== null) {
+        const lv = avgClose > TARGET.closingHari ? 'med' : 'ok';
+        hz.push({ lv: lv, t: `Rata-rata waktu closing ${avgClose} hari (dari ${closeDur.length} temuan closed bertanggal lengkap); acuan ${TARGET.closingHari} hari.`, s: lv === 'ok' ? '' : 'Tetapkan batas waktu closing per tingkat risiko (risiko lebih tinggi, batas lebih singkat) dan tampilkan capaiannya per PIC.' });
+      }
+      if (belumDinilai > 0) hz.push({ lv: 'med', t: `${belumDinilai} temuan belum dinilai kriteria risikonya.`, s: 'Lengkapi penilaian risiko agar prioritas perbaikan dan statistik risiko akurat.' });
+      if (rejectN > 0) hz.push({ lv: 'med', t: `${rejectN} temuan pernah ditolak saat closing oleh pengawas pelapor.`, s: 'Sosialisasikan standar bukti closing (foto before–after dari sudut yang sama, tindakan perbaikan jelas) ke PIC kontraktor agar tidak bolak-balik.' });
+      if (bandingPending > 0) hz.push({ lv: 'med', t: `${bandingPending} banding/klarifikasi menunggu keputusan admin.`, s: 'Putuskan segera agar status temuan tidak menggantung.' });
+      if (total >= 20 && ttaShare < TARGET.minTtaPct) hz.push({ lv: 'med', t: `Hanya ${ttaShare}% laporan bertipe TTA (${ttaN}) dibanding KTA (${ktaN}).`, s: 'Rasio ini bisa berarti perilaku tidak aman kurang terlaporkan; perkuat Observasi dan beri contoh pelaporan TTA kepada pengawas.' });
+      if (total >= 20 && topAreas.length && pct(topAreas[0].n, total) >= TARGET.areaDominanPct) hz.push({ lv: 'med', t: `Area ${topAreas[0].label} menyumbang ${pct(topAreas[0].n, total)}% temuan (${topAreas[0].n}).`, s: 'Prioritaskan inspeksi terjadwal dan telaah penyebab akar di area ini; pertimbangkan pengendalian teknis (engineering control).' });
+      if (topKta.length && topKta[0].n >= 3) hz.push({ lv: 'info', t: `KTA terbanyak: ${joinTop(topKta)}.`, s: 'Karena berulang, cari perbaikan sistemik (standar, desain, perawatan), bukan hanya perbaikan per temuan.' });
+      if (topTta.length && topTta[0].n >= 3) hz.push({ lv: 'info', t: `TTA terbanyak: ${joinTop(topTta)}.`, s: 'Jadikan topik Safety Talk dan fokus Observasi.' });
+    }
+    const hzTiles = [['Total Hazard', total], ['Closing Rate', closingRate + '%'], ['Belum Closed', openArr.length], ['Rata² Closing', avgClose === null ? '-' : avgClose + ' hr'], ['High Risk Terbuka', highOpen.length]];
+
+    // ===== 3) Analisis program SAP lain =====
+    const deptSetOf = (arr) => { const s = new Set(); arr.forEach(d => { const n = cleanText(d.departemen); if (n && isValidDept(n)) s.add(n.toLowerCase()); }); return s; };
+    const progAnalysis = (prog, focusText) => {
+      if (!sapLoaded) return { tiles: [['Total', '…']], items: [{ lv: 'info', t: 'Data masih dimuat...', s: '' }] };
+      const arr = sapArr.filter(d => classifySap(d.kategori) === prog);
+      const tr = trendInfo(prog);
+      const tiles = [['Total', arr.length], ['Bulan terakhir' + (tr ? ' (' + tr.ll + ')' : ''), tr ? tr.last : '-'], ['Vs bulan sebelumnya', tr && tr.ch !== null ? (tr.ch > 0 ? '+' : '') + tr.ch + '%' : '-']];
+      const items = [];
+      if (arr.length === 0) { items.push({ lv: 'high', t: `Belum ada kegiatan ${prog} pada periode/filter ini.`, s: 'Pastikan data sudah terinput; jika memang belum dilaksanakan, jadwalkan segera.' }); return { tiles: tiles, items: items }; }
+      if (tr && tr.prev > 0) {
+        if (tr.ch <= -TARGET.turunPct) items.push({ lv: 'med', t: `${prog} bulan ${tr.ll} turun ${Math.abs(tr.ch)}% dibanding ${tr.pl} (${tr.last} vs ${tr.prev}).`, s: 'Telusuri penyebabnya (jadwal, kendala lapangan, atau keterlambatan input) lalu jadwalkan ulang kegiatan.' });
+        else if (tr.ch >= TARGET.turunPct) items.push({ lv: 'ok', t: `${prog} bulan ${tr.ll} naik ${tr.ch}% dibanding ${tr.pl} (${tr.last} vs ${tr.prev}).`, s: '' });
+        else items.push({ lv: 'ok', t: `${prog} relatif stabil: ${tr.last} pada ${tr.ll} vs ${tr.prev} pada ${tr.pl}.`, s: '' });
+      }
+      const dC = makeCounter(); arr.forEach(d => { const n = cleanText(d.departemen); if (n && isValidDept(n)) dC.add(n); });
+      const dTop = topN(dC, 3);
+      if (dTop.length && arr.length >= 10 && pct(dTop[0].n, arr.length) >= TARGET.dominasiPct) items.push({ lv: 'med', t: `${prog} didominasi ${dTop[0].label} (${pct(dTop[0].n, arr.length)}% dari ${arr.length}).`, s: 'Distribusi belum merata; tetapkan target minimal per departemen agar partisipasi lebih luas.' });
+      if (isAllRep && globalRepList.length) {
+        const have = deptSetOf(arr); const absent = globalRepList.filter(r => !have.has(r.toLowerCase()));
+        if (absent.length > 0) items.push({ lv: 'med', t: `${absent.length} dari ${globalRepList.length} departemen belum tercatat melaksanakan ${prog}: ${absent.slice(0, 6).join(', ')}${absent.length > 6 ? ', dll.' : ''}.`, s: 'Pastikan apakah departemen tersebut memang wajib berpartisipasi; jika ya, ingatkan PIC departemen dan tetapkan target bulanan.' });
+        else items.push({ lv: 'ok', t: `Seluruh departemen (${globalRepList.length}) tercatat melaksanakan ${prog}.`, s: '' });
+      }
+      if (prog !== 'Safety Talk' && topAreas.length && arr.some(d => cleanText(d.area) !== '')) {
+        const rows = topAreas.map(a => ({ a: a.label, haz: a.n, p: arr.filter(d => cleanText(d.area).toUpperCase().indexOf(a.label) !== -1).length }));
+        const kurang = rows.filter(r => r.p < r.haz);
+        items.push({ lv: kurang.length ? 'med' : 'ok', t: `Area hazard terbanyak vs ${prog}: ${rows.map(r => `${r.a}: ${r.haz} hazard / ${r.p} ${prog.toLowerCase()}`).join('; ')} (dicocokkan dari nama area).`, s: kurang.length ? `Tambah frekuensi atau cakupan ${prog.toLowerCase()} di ${kurang.map(r => r.a).join(', ')} karena temuan di sana lebih banyak daripada kegiatannya.` : '' });
+      }
+      if (focusText) items.push({ lv: 'info', t: focusText.t, s: focusText.s });
+      return { tiles: tiles, items: items };
+    };
+    const insp = progAnalysis('Inspeksi', topKta.length ? { t: `KTA berulang di data hazard: ${joinTop(topKta)}.`, s: 'Masukkan hal-hal ini sebagai poin wajib pada checklist inspeksi.' } : null);
+    const obs = progAnalysis('Observasi', topTta.length ? { t: `TTA berulang di data hazard: ${joinTop(topTta)}.`, s: 'Arahkan fokus pengamatan perilaku pada tindakan ini.' } : null);
+    const mix = topTta.slice(0, 2).concat(topKta.slice(0, 2));
+    const st = progAnalysis('Safety Talk', mix.length ? { t: `Usulan tema Safety Talk dari temuan hazard terbanyak: ${joinTop(mix)}.`, s: 'Pilih tema yang relevan dengan area dan pekerjaan minggu tersebut.' } : null);
+
+    // ===== 4) Render =====
+    const card = (title, icon, color, tiles, items) =>
+      `<div class="ana-card" style="border-top:5px solid ${color};"><div class="filter-title" style="color:${color}; font-size:0.95rem;"><i class="fa-solid ${icon}"></i> ${escapeHTML(title)}</div>` +
+      `<div class="ana-tiles">${tiles.map(t => `<div class="ana-tile"><b>${escapeHTML(t[1])}</b><span>${escapeHTML(t[0])}</span></div>`).join('')}</div>` +
+      items.map(it => `<div class="ana-item lv-${it.lv}"><b>${escapeHTML(it.t)}</b>${it.s ? `<span class="ana-saran"><i class="fa-solid fa-lightbulb"></i> ${escapeHTML(it.s)}</span>` : ''}</div>`).join('') + `</div>`;
+
+    const prio = [];
+    [['Hazard', hz], ['Inspeksi', insp.items], ['Observasi', obs.items], ['Safety Talk', st.items]].forEach(g => g[1].filter(it => it.lv === 'high').forEach(it => prio.push(`<li><b>${escapeHTML(g[0])}:</b> ${escapeHTML(it.t)}</li>`)));
+    const prioHtml = prio.length
+      ? `<div class="ana-prio"><b><i class="fa-solid fa-flag"></i> Prioritas tindakan</b><ul>${prio.slice(0, 6).join('')}</ul></div>`
+      : `<div class="ana-prio ok"><b><i class="fa-solid fa-circle-check"></i> Tidak ada temuan prioritas tinggi pada filter ini.</b></div>`;
+
+    el.innerHTML = prioHtml + `<div class="ana-grid">` +
+      card('Hazard Report', 'fa-triangle-exclamation', '#dc3545', hzTiles, hz) +
+      card('Inspeksi', 'fa-magnifying-glass-chart', '#00a8cc', insp.tiles, insp.items) +
+      card('Observasi', 'fa-eye', '#6f42c1', obs.tiles, obs.items) +
+      card('Safety Talk', 'fa-comments', '#28a745', st.tiles, st.items) + `</div>` +
+      `<div style="font-size:0.7rem; color:#888; margin:-10px 0 20px;">Rekomendasi dibuat otomatis dari data yang sedang difilter. Ambang acuan (closing rate ${TARGET.closingRatePct}%, aging ${TARGET.agingHari}/${TARGET.agingKritisHari} hari, closing ${TARGET.closingHari} hari, dll.) dapat diubah pada konstanta TARGET dan sebaiknya disesuaikan dengan target resmi HSE.</div>`;
   }
 
   // Catatan validasi di atas grafik agar angka mudah diaudit
