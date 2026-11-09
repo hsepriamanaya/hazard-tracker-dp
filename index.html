@@ -1179,7 +1179,6 @@
     let html = `<b><i class="fa-solid fa-circle-check"></i> Validasi data:</b> Total SAP <b>${totalSap}</b> = Hazard <b>${i.hazard}</b> + Inspeksi <b>${i.inspeksi}</b> + Observasi <b>${i.observasi}</b> + Safety Talk <b>${i.safety}</b>. Jumlah Hazard sama dengan total pada grafik Status, Kategori, dan Kriteria Risiko.`;
     let warn = false;
     if (window.__picFilterActive) { html += `<br>• Filter PIC/Perusahaan hanya berlaku untuk data Hazard; Inspeksi, Observasi, dan Safety Talk tidak ikut tersaring.`; }
-    if (i.hseReported > 0) { html += `<br>• ${i.hseReported} data dilaporkan oleh HSE (panitia SAP) tidak ditampilkan sebagai departemen pelapor pada grafik departemen dan analisis partisipasi${HSE_DIKELUARKAN_DARI_TOTAL ? '' : ', namun tetap dihitung pada total'}.`; }
     if (i.emptyDept > 0) { warn = true; html += `<br>• ${i.emptyDept} data tidak memiliki departemen pelapor.`; }
     if (!i.sapLoaded) { html += `<br><i class="fa-solid fa-spinner fa-spin"></i> Data Inspeksi/Observasi/Safety Talk masih dimuat...`; }
     if (i.hazardRowsIgnored > 0) { html += `<br>• ${i.hazardRowsIgnored} baris Hazard di data SAP diabaikan karena sudah dihitung dari data Hazard (mencegah hitungan ganda).`; }
